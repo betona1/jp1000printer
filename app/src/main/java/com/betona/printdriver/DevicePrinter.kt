@@ -89,36 +89,65 @@ object DevicePrinter {
 
     // ── Convenience methods ──────────────────────────────────────────────
 
+    /**
+     * Initialize printer. Combined into single jyPrintString call.
+     */
     fun initPrinter(brightness: Int = DEFAULT_BRIGHTNESS) {
-        write(EscPosCommands.initialize())
-        write(EscPosCommands.setBrightness(brightness))
+        write(EscPosCommands.initialize() + EscPosCommands.setBrightness(brightness))
     }
 
+    /**
+     * Print a monochrome bitmap + feed + cut in minimal jyPrintString calls.
+     * Combines raster header with image data, and feed with cut command.
+     * Minimizing calls reduces heap corruption from native library bug.
+     */
+    fun printBitmapAndCut(monoData: ByteArray, widthBytes: Int = PRINT_WIDTH_BYTES, fullCut: Boolean = true) {
+        val totalHeight = monoData.size / widthBytes
+        Log.d(TAG, "printBitmapAndCut: ${widthBytes}x${totalHeight} = ${monoData.size} bytes")
+
+        // Combine header + image data into one large buffer, send in big chunks
+        val header = EscPosCommands.rasterBitImageHeader(0, widthBytes, totalHeight)
+        val payload = header + monoData
+        val chunkSize = 65536  // 64KB chunks - fewer calls
+        var offset = 0
+        while (offset < payload.size) {
+            val end = minOf(offset + chunkSize, payload.size)
+            write(payload.copyOfRange(offset, end))
+            offset = end
+        }
+
+        // Combine feed + cut into single call
+        val cutCmd = if (fullCut) EscPosCommands.fullCut() else EscPosCommands.partialCut()
+        write(EscPosCommands.feedLines(4) + cutCmd)
+        Log.d(TAG, "printBitmapAndCut: done (${if (fullCut) "full" else "partial"} cut)")
+    }
+
+    /**
+     * Print bitmap without cut (for multi-page, cut after last page).
+     */
     fun printBitmap(monoData: ByteArray, widthBytes: Int = PRINT_WIDTH_BYTES) {
         val totalHeight = monoData.size / widthBytes
         Log.d(TAG, "printBitmap: ${widthBytes}x${totalHeight} = ${monoData.size} bytes")
 
         val header = EscPosCommands.rasterBitImageHeader(0, widthBytes, totalHeight)
-        write(header)
-
-        val chunkSize = 4096
+        val payload = header + monoData
+        val chunkSize = 65536
         var offset = 0
-        while (offset < monoData.size) {
-            val end = minOf(offset + chunkSize, monoData.size)
-            write(monoData.copyOfRange(offset, end))
+        while (offset < payload.size) {
+            val end = minOf(offset + chunkSize, payload.size)
+            write(payload.copyOfRange(offset, end))
             offset = end
         }
         Log.d(TAG, "printBitmap: done")
     }
 
     /**
-     * Feed paper and cut using ESC/POS GS V 0 command.
-     * No jyPrinterClose() needed - no crash.
+     * Feed paper and cut. Combined into single jyPrintString call.
      */
-    fun feedAndCut() {
-        write(EscPosCommands.feedLines(4))
-        write(EscPosCommands.fullCut())
-        Log.d(TAG, "feedAndCut: feed + GS V 0 sent")
+    fun feedAndCut(fullCut: Boolean = true) {
+        val cutCmd = if (fullCut) EscPosCommands.fullCut() else EscPosCommands.partialCut()
+        write(EscPosCommands.feedLines(4) + cutCmd)
+        Log.d(TAG, "feedAndCut: ${if (fullCut) "full" else "partial"} cut sent")
     }
 
     fun nativeFeed(fd: Int, direction: Int): Int {

@@ -49,8 +49,8 @@ class MainActivity : AppCompatActivity() {
         binding.btnTestText.setOnClickListener { testTextPrint() }
         binding.btnTestQrCode.setOnClickListener { testQrPrint() }
         binding.btnTestImage.setOnClickListener { testImagePrint() }
-        binding.btnTestCut.setOnClickListener { testCutMethods() }
-        binding.btnTestImageCut.setOnClickListener { testImageThenCut() }
+        binding.btnTestFullCut.setOnClickListener { testCutType(full = true) }
+        binding.btnTestPartialCut.setOnClickListener { testCutType(full = false) }
     }
 
     private fun checkDeviceStatus() {
@@ -109,9 +109,8 @@ class MainActivity : AppCompatActivity() {
                 val monoData = BitmapConverter.toMonochrome(scaled)
                 if (scaled !== bitmap) scaled.recycle()
 
-                printer.printBitmap(monoData)
+                printer.printBitmapAndCut(monoData)
                 bitmap.recycle()
-                printer.feedAndCut()
 
                 runOnUiThread { log("라벨 인쇄 완료") }
             } catch (e: Exception) {
@@ -235,10 +234,9 @@ class MainActivity : AppCompatActivity() {
                 val bitmap = BitmapConverter.textToBitmap(this, text)
                 if (bitmap != null) {
                     val monoData = BitmapConverter.toMonochrome(bitmap)
-                    printer.printBitmap(monoData)
+                    printer.printBitmapAndCut(monoData)
                     bitmap.recycle()
                 }
-                printer.feedAndCut()
                 runOnUiThread { log("텍스트 인쇄 완료") }
             } catch (e: Exception) {
                 Log.e(TAG, "Text print error", e)
@@ -263,10 +261,9 @@ class MainActivity : AppCompatActivity() {
                 val bitmap = BitmapConverter.textToBitmap(this@MainActivity, "QR 테스트:\n$qrText", 32f)
                 if (bitmap != null) {
                     val monoData = BitmapConverter.toMonochrome(bitmap)
-                    printer.printBitmap(monoData)
+                    printer.printBitmapAndCut(monoData)
                     bitmap.recycle()
                 }
-                printer.feedAndCut()
                 runOnUiThread { log("QR코드 인쇄 완료") }
             } catch (e: Exception) {
                 Log.e(TAG, "QR print error", e)
@@ -299,9 +296,8 @@ class MainActivity : AppCompatActivity() {
                 if (scaled !== bitmap) scaled.recycle()
                 val trimmed = BitmapConverter.trimTrailingWhiteRows(monoData)
 
-                printer.printBitmap(trimmed)
+                printer.printBitmapAndCut(trimmed)
                 bitmap.recycle()
-                printer.feedAndCut()
                 runOnUiThread { log("이미지 인쇄 완료 (${trimmed.size} bytes)") }
             } catch (e: Exception) {
                 Log.e(TAG, "Image print error", e)
@@ -333,11 +329,11 @@ class MainActivity : AppCompatActivity() {
         return bmp
     }
 
-    // ── Test: Image then Cut (driver state reset) ─────────────────────
+    // ── Test: Full / Partial Cut ────────────────────────────────────────
 
-    private fun testImageThenCut() {
-        log("이미지+커트 테스트 (드라이버 상태 리셋)")
-        log("이미지 인쇄 후 re-open → 작은 텍스트 → close 순서")
+    private fun testCutType(full: Boolean) {
+        val typeName = if (full) "전체 절단 (GS V 0)" else "부분 절단 (GS V 66)"
+        log("$typeName 테스트")
         Thread {
             if (!printer.open()) {
                 runOnUiThread { log("프린터를 열 수 없습니다") }
@@ -346,109 +342,17 @@ class MainActivity : AppCompatActivity() {
             try {
                 printer.initPrinter()
 
-                // Print a small test image (same as testImagePrint)
-                val bitmap = createTestPattern()
-                val scaled = BitmapConverter.scaleToWidth(bitmap, DevicePrinter.PRINT_WIDTH_PX)
-                val monoData = BitmapConverter.toMonochrome(scaled)
-                if (scaled !== bitmap) scaled.recycle()
-                val trimmed = BitmapConverter.trimTrailingWhiteRows(monoData)
-
-                printer.printBitmap(trimmed)
-                bitmap.recycle()
-                runOnUiThread { log("이미지 인쇄 완료, 커트 시도중...") }
-
-                // feedAndCut now resets driver state before close
-                printer.feedAndCut()
-
-                // If we get here, close didn't crash (unlikely)
-                runOnUiThread { log("커트 완료 (크래시 없음!)") }
-            } catch (e: Exception) {
-                Log.e(TAG, "Image+Cut test error", e)
-                runOnUiThread { log("오류: ${e.message}") }
-            }
-        }.start()
-    }
-
-    // ── Test: Cut Methods ──────────────────────────────────────────────
-
-    private fun testCutMethods() {
-        log("커트 테스트 시작 - 7가지 방법 시도")
-        log("각 방법 사이 5초 대기, 잘리면 몇번에서 잘렸는지 알려주세요")
-        Thread {
-            if (!printer.open()) {
-                runOnUiThread { log("프린터를 열 수 없습니다") }
-                return@Thread
-            }
-            try {
-                printer.initPrinter()
-
-                // 먼저 텍스트 인쇄해서 용지 내보내기
-                val textBytes = "=== 커트 테스트 ===\n\n".toByteArray(Charsets.UTF_8)
-                printer.write(EscPosCommands.justifyCenter())
-                printer.write(textBytes)
-                printer.write(EscPosCommands.feedLines(3))
-
-                // 방법 1: GS V 0 via write (sync=0)
-                runOnUiThread { log("방법1: GS V 0 (write sync=0)") }
-                printer.write(byteArrayOf(0x1D, 0x56, 0x00))
-                Thread.sleep(5000)
-
-                printer.write("방법1 실패. 방법2 시도\n".toByteArray())
-                printer.write(EscPosCommands.feedLines(3))
-
-                // 방법 2: GS V 0 via writeSync (sync=1)
-                runOnUiThread { log("방법2: GS V 0 (write sync=1)") }
-                printer.writeSync(byteArrayOf(0x1D, 0x56, 0x00))
-                Thread.sleep(5000)
-
-                printer.write("방법2 실패. 방법3 시도\n".toByteArray())
-                printer.write(EscPosCommands.feedLines(3))
-
-                // 방법 3: GS V 0 via writeRaw
-                runOnUiThread { log("방법3: GS V 0 (writeRaw)") }
-                printer.writeRaw(byteArrayOf(0x1D, 0x56, 0x00))
-                Thread.sleep(5000)
-
-                printer.write("방법3 실패. 방법4 시도\n".toByteArray())
-                printer.write(EscPosCommands.feedLines(3))
-
-                // 방법 4: GS V 66 0 (partial cut with feed)
-                runOnUiThread { log("방법4: GS V 66 0 (partial cut)") }
-                printer.write(byteArrayOf(0x1D, 0x56, 0x42, 0x00))
-                Thread.sleep(5000)
-
-                printer.write("방법4 실패. 방법5 시도\n".toByteArray())
-                printer.write(EscPosCommands.feedLines(3))
-
-                // 방법 5: ESC i (alternative full cut)
-                runOnUiThread { log("방법5: ESC i") }
-                printer.write(byteArrayOf(0x1B, 0x69))
-                Thread.sleep(5000)
-
-                printer.write("방법5 실패. 방법6 시도\n".toByteArray())
-                printer.write(EscPosCommands.feedLines(3))
-
-                // 방법 6: ESC m (alternative partial cut)
-                runOnUiThread { log("방법6: ESC m") }
-                printer.write(byteArrayOf(0x1B, 0x6D))
-                Thread.sleep(5000)
-
-                printer.write("방법6 실패. 방법7 시도\n".toByteArray())
-                printer.write(EscPosCommands.feedLines(3))
-
-                // 방법 7: jyPrinterFeed native + GS V 0
-                runOnUiThread { log("방법7: native feed + GS V 0") }
-                val nativeFd = 0
-                for (dir in 0..3) {
-                    val r = printer.nativeFeed(nativeFd, dir)
-                    Log.d(TAG, "jyPrinterFeed($nativeFd, $dir) = $r")
+                val label = if (full) "[ 전체 절단 테스트 ]" else "[ 부분 절단 테스트 ]"
+                val bitmap = BitmapConverter.textToBitmap(this@MainActivity, "$label\n$typeName", 40f)
+                if (bitmap != null) {
+                    val monoData = BitmapConverter.toMonochrome(bitmap)
+                    printer.printBitmapAndCut(monoData, fullCut = full)
+                    bitmap.recycle()
                 }
-                printer.write(byteArrayOf(0x1D, 0x56, 0x00))
-                Thread.sleep(3000)
 
-                runOnUiThread { log("커트 테스트 완료 - 몇번에서 잘렸나요?") }
+                runOnUiThread { log("$typeName 완료") }
             } catch (e: Exception) {
-                Log.e(TAG, "Cut test error", e)
+                Log.e(TAG, "Cut type test error", e)
                 runOnUiThread { log("오류: ${e.message}") }
             }
         }.start()

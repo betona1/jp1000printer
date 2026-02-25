@@ -66,9 +66,6 @@ class LibroPrintService : PrintService() {
             try {
                 doPrint(fd)
 
-                // Feed and cut (ESC/POS command, no crash)
-                activePrinter.feedAndCut()
-
                 val latch = CountDownLatch(1)
                 mainHandler.post {
                     printJob.complete()
@@ -142,8 +139,13 @@ class LibroPrintService : PrintService() {
             val monoData = BitmapConverter.trimTrailingWhiteRows(monoRaw)
             Log.d(TAG, "Page ${i+1}: mono=${monoRaw.size} trimmed=${monoData.size} bytes")
 
-            activePrinter.printBitmap(monoData)
-            Log.d(TAG, "Page ${i+1} printed")
+            val isLastPage = (i == pageCount - 1)
+            if (isLastPage) {
+                activePrinter.printBitmapAndCut(monoData)
+            } else {
+                activePrinter.printBitmap(monoData)
+            }
+            Log.d(TAG, "Page ${i+1} printed${if (isLastPage) " + cut" else ""}")
         }
         pdfRenderer.close()
         tempFile.delete()
