@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- Header -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="LibroPrintDriver"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="JY-P1000 감열 프린터 드라이버"
+            android:textSize="14sp"
+            android:gravity="center"
+            android:textColor="#666666"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Device Status -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="장치 상태"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/tvDeviceStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="확인 중..."
+            android:textSize="13sp"
+            android:background="#F0F0F0"
+            android:padding="12dp"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Print Service Settings -->
+        <Button
+            android:id="@+id/btnOpenPrintSettings"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="인쇄 서비스 설정 열기"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#CCCCCC"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Test Section -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="직접 인쇄 테스트"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp" />
+
+        <Button
+            android:id="@+id/btnTestConnection"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="연결 테스트"
+            android:layout_marginBottom="8dp" />
+
+        <Button
+            android:id="@+id/btnTestLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="청구기호 라벨 인쇄 테스트"
+            android:layout_marginBottom="8dp" />
+
+        <Button
+            android:id="@+id/btnTestQrCode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="QR코드 인쇄 테스트"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#CCCCCC"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Text Print -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="텍스트 인쇄"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp" />
+
+        <EditText
+            android:id="@+id/etTestText"
+            android:layout_width="match_parent"
+            android:layout_height="100dp"
+            android:gravity="top|start"
+            android:inputType="textMultiLine"
+            android:hint="인쇄할 텍스트를 입력하세요"
+            android:background="#FAFAFA"
+            android:padding="8dp"
+            android:layout_marginBottom="8dp" />
+
+        <Button
+            android:id="@+id/btnTestText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="텍스트 인쇄"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#CCCCCC"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Log -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="로그"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/tvLog"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="120dp"
+            android:text=""
+            android:textSize="11sp"
+            android:background="#F5F5F5"
+            android:padding="8dp"
+            android:fontFamily="monospace" />
+
+    </LinearLayout>
+</ScrollView>

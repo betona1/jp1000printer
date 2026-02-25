@@ -1,0 +1,20 @@
+*.iml
+.gradle
+/local.properties
+/.idea/
+.DS_Store
+/build
+*/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+*.jks
+*.keystore
+gradle.properties
+.claude/
+
+# Native build intermediates
+**/obj/
+*.o
+*.o.d
