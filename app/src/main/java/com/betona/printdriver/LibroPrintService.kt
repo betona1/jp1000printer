@@ -4,20 +4,25 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
-import android.print.PrintJobId
+import android.os.Handler
+import android.os.Looper
+import android.os.ParcelFileDescriptor
 import android.printservice.PrintJob
 import android.printservice.PrintService
 import android.printservice.PrinterDiscoverySession
 import android.util.Log
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * Android PrintService for JY-P1000 built-in 3" thermal printer.
  *
- * Registered in Settings → Print → LibroPrintDriver.
- * Receives PDF print jobs from any app, renders pages to bitmap,
- * converts to ESC/POS raster format, and sends to /dev/printer.
+ * PrintJob methods (start/complete/fail) MUST be called on main thread.
+ * Actual printing runs on background thread.
+ * Cut uses ESC/POS GS V 0 command via jyPrintString (no crash).
  */
 class LibroPrintService : PrintService() {
 
@@ -25,10 +30,8 @@ class LibroPrintService : PrintService() {
         private const val TAG = "LibroPrintService"
     }
 
-    private val executor: ExecutorService = Executors.newSingleThreadExecutor()
-    private val activePrinter = DevicePrinter()
-
-    // ── PrintService callbacks ───────────────────────────────────────────
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val activePrinter = DevicePrinter
 
     override fun onCreatePrinterDiscoverySession(): PrinterDiscoverySession {
         Log.d(TAG, "onCreatePrinterDiscoverySession")
@@ -36,92 +39,114 @@ class LibroPrintService : PrintService() {
     }
 
     override fun onRequestCancelPrintJob(printJob: PrintJob) {
-        Log.d(TAG, "onRequestCancelPrintJob: ${printJob.id}")
+        Log.d(TAG, "onRequestCancelPrintJob")
         printJob.cancel()
     }
 
     override fun onPrintJobQueued(printJob: PrintJob) {
-        Log.i(TAG, "onPrintJobQueued: ${printJob.id}, doc=${printJob.info.label}")
-        executor.submit { handlePrintJob(printJob) }
+        val attrs = printJob.info.attributes
+        val media = attrs?.mediaSize
+        Log.i(TAG, "onPrintJobQueued: ${printJob.info.label}, paper=${media?.id} (${media?.widthMils}x${media?.heightMils} mils)")
+
+        if (!printJob.start()) {
+            Log.e(TAG, "printJob.start() failed")
+            return
+        }
+
+        val fd = printJob.document.data
+        if (fd == null) {
+            Log.e(TAG, "Document data is null")
+            printJob.fail("인쇄 데이터가 없습니다")
+            return
+        }
+
+        Log.i(TAG, "Job started, launching print thread")
+
+        Thread {
+            try {
+                doPrint(fd)
+
+                // Feed and cut (ESC/POS command, no crash)
+                activePrinter.feedAndCut()
+
+                val latch = CountDownLatch(1)
+                mainHandler.post {
+                    printJob.complete()
+                    Log.i(TAG, "Print job COMPLETED")
+                    latch.countDown()
+                }
+                latch.await(3, TimeUnit.SECONDS)
+
+            } catch (e: Throwable) {
+                Log.e(TAG, "Print FAILED", e)
+                mainHandler.post {
+                    try { printJob.fail("인쇄 오류: ${e.message}") } catch (_: Exception) {}
+                }
+            }
+        }.start()
     }
 
     override fun onDestroy() {
         Log.d(TAG, "onDestroy")
-        executor.shutdown()
-        activePrinter.close()
         super.onDestroy()
     }
 
-    // ── Print job handling ───────────────────────────────────────────────
+    // ── Actual printing (background thread) ──────────────────────────────
 
-    private fun handlePrintJob(printJob: PrintJob) {
-        printJob.start()
-        Log.i(TAG, "Started print job: ${printJob.id}")
-
-        try {
-            // Open printer
-            if (!activePrinter.open()) {
-                failJob(printJob, "프린터 장치를 열 수 없습니다 (${DevicePrinter.DEVICE_PATH})")
-                return
-            }
-
-            // Initialize
-            activePrinter.initPrinter()
-
-            // Get document data (PDF)
-            val fd = printJob.document.data
-            if (fd == null) {
-                failJob(printJob, "인쇄 데이터가 없습니다")
-                return
-            }
-
-            // Render and print each PDF page
-            val pdfRenderer = PdfRenderer(fd)
-            val pageCount = pdfRenderer.pageCount
-            Log.i(TAG, "PDF pages: $pageCount")
-
-            for (i in 0 until pageCount) {
-                Log.d(TAG, "Rendering page ${i + 1}/$pageCount")
-                val page = pdfRenderer.openPage(i)
-
-                // Scale PDF page to fit printer width (576px)
-                val scale = DevicePrinter.PRINT_WIDTH_PX.toFloat() / page.width
-                val bitmapWidth = DevicePrinter.PRINT_WIDTH_PX
-                val bitmapHeight = (page.height * scale).toInt()
-
-                val bitmap = Bitmap.createBitmap(bitmapWidth, bitmapHeight, Bitmap.Config.ARGB_8888)
-                val canvas = Canvas(bitmap)
-                canvas.drawColor(Color.WHITE)
-
-                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
-                page.close()
-
-                // Convert to monochrome and send to printer
-                val monoData = BitmapConverter.toMonochrome(bitmap)
-                bitmap.recycle()
-                activePrinter.printBitmap(monoData)
-
-                Log.d(TAG, "Page ${i + 1} sent: ${monoData.size} bytes")
-            }
-            pdfRenderer.close()
-
-            // Feed and auto-cut
-            activePrinter.feedAndCut()
-            activePrinter.close()
-
-            printJob.complete()
-            Log.i(TAG, "Print job completed: ${printJob.id}")
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Print job failed: ${printJob.id}", e)
-            failJob(printJob, "인쇄 오류: ${e.message}")
-            activePrinter.close()
+    private fun doPrint(fd: ParcelFileDescriptor) {
+        if (!activePrinter.open()) {
+            throw RuntimeException("프린터 장치를 열 수 없습니다")
         }
-    }
+        activePrinter.initPrinter()
 
-    private fun failJob(printJob: PrintJob, reason: String) {
-        Log.e(TAG, "Job ${printJob.id} failed: $reason")
-        printJob.fail(reason)
-        activePrinter.close()
+        val tempFile = File.createTempFile("print_", ".pdf", cacheDir)
+        try {
+            FileInputStream(fd.fileDescriptor).use { input ->
+                FileOutputStream(tempFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
+            fd.close()
+        } catch (e: Exception) {
+            tempFile.delete()
+            throw RuntimeException("PDF 임시 파일 생성 실패: ${e.message}")
+        }
+
+        val seekableFd = ParcelFileDescriptor.open(tempFile, ParcelFileDescriptor.MODE_READ_ONLY)
+        val pdfRenderer = PdfRenderer(seekableFd)
+        val pageCount = pdfRenderer.pageCount
+        Log.i(TAG, "PDF pages: $pageCount, tempFile: ${tempFile.length()} bytes")
+
+        for (i in 0 until pageCount) {
+            val page = pdfRenderer.openPage(i)
+
+            val scale = DevicePrinter.PRINT_WIDTH_PX.toFloat() / page.width
+            val bitmapWidth = DevicePrinter.PRINT_WIDTH_PX
+            val bitmapHeight = (page.height * scale).toInt()
+            Log.d(TAG, "Page ${i+1}/$pageCount: ${page.width}x${page.height} → ${bitmapWidth}x${bitmapHeight}")
+
+            var bitmap = Bitmap.createBitmap(bitmapWidth, bitmapHeight, Bitmap.Config.ARGB_8888)
+            Canvas(bitmap).drawColor(Color.WHITE)
+            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
+            page.close()
+
+            val cropped = BitmapConverter.cropWhiteBorders(bitmap)
+            Log.d(TAG, "Page ${i+1}: render=${bitmap.width}x${bitmap.height} crop=${cropped.width}x${cropped.height}")
+            if (cropped !== bitmap) bitmap.recycle()
+            val scaled = BitmapConverter.scaleToWidth(cropped, DevicePrinter.PRINT_WIDTH_PX)
+            if (scaled !== cropped) cropped.recycle()
+
+            val monoRaw = BitmapConverter.toMonochrome(scaled)
+            scaled.recycle()
+
+            val monoData = BitmapConverter.trimTrailingWhiteRows(monoRaw)
+            Log.d(TAG, "Page ${i+1}: mono=${monoRaw.size} trimmed=${monoData.size} bytes")
+
+            activePrinter.printBitmap(monoData)
+            Log.d(TAG, "Page ${i+1} printed")
+        }
+        pdfRenderer.close()
+        tempFile.delete()
+        Log.d(TAG, "doPrint complete")
     }
 }

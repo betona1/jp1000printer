@@ -10,7 +10,7 @@ import java.io.File
 
 /**
  * Discovers the built-in JY-P1000 thermal printer.
- * Reports a single printer with 80mm receipt paper capabilities.
+ * Reports 80mm continuous roll paper so apps format content for 80mm width.
  */
 class LibroDiscoverySession(
     private val service: LibroPrintService
@@ -25,53 +25,43 @@ class LibroDiscoverySession(
     override fun onStartPrinterDiscovery(priorityList: MutableList<PrinterId>) {
         Log.d(TAG, "onStartPrinterDiscovery")
         val printerId = service.generatePrinterId(PRINTER_LOCAL_ID)
-
-        // Check if device exists
         val status = if (File(DevicePrinter.DEVICE_PATH).exists()) {
             PrinterInfo.STATUS_IDLE
         } else {
             PrinterInfo.STATUS_UNAVAILABLE
         }
-
-        val info = PrinterInfo.Builder(printerId, PRINTER_NAME, status).build()
-        addPrinters(listOf(info))
+        addPrinters(listOf(PrinterInfo.Builder(printerId, PRINTER_NAME, status).build()))
     }
 
-    override fun onStopPrinterDiscovery() {
-        Log.d(TAG, "onStopPrinterDiscovery")
-    }
-
-    override fun onValidatePrinters(printerIds: MutableList<PrinterId>) {
-        Log.d(TAG, "onValidatePrinters: ${printerIds.size}")
-    }
+    override fun onStopPrinterDiscovery() {}
+    override fun onValidatePrinters(printerIds: MutableList<PrinterId>) {}
 
     override fun onStartPrinterStateTracking(printerId: PrinterId) {
-        Log.d(TAG, "onStartPrinterStateTracking: $printerId")
+        Log.d(TAG, "onStartPrinterStateTracking")
 
-        // Report full capabilities
         val resolution = PrintAttributes.Resolution("203dpi", "203 DPI", 203, 203)
 
-        // 80mm receipt paper: ~72mm printable width, continuous roll
-        // MediaSize uses mils (1/1000 inch): 80mm ≈ 3150 mils
-        // Max print length 300mm ≈ 11811 mils
-        val receiptPaper = PrintAttributes.MediaSize(
-            "RECEIPT_80MM",
-            "80mm 감열지",
-            3150,   // width: 80mm
-            11811   // height: 300mm (max)
+        // Paper width: 75mm (2953 mils) - ~70% of 60mm text size
+        val receipt150 = PrintAttributes.MediaSize(
+            "RECEIPT_75x150",
+            "75mm x 150mm",
+            2953, 5906     // 150mm
         )
-
-        // Smaller label size for call number labels
-        val labelPaper = PrintAttributes.MediaSize(
-            "LABEL_80x50",
-            "80x50mm 라벨",
-            3150,   // width: 80mm
-            1969    // height: 50mm
+        val receipt300 = PrintAttributes.MediaSize(
+            "RECEIPT_75x300",
+            "75mm x 300mm",
+            2953, 11811    // 300mm
+        )
+        val receipt600 = PrintAttributes.MediaSize(
+            "RECEIPT_75x600",
+            "75mm x 600mm",
+            2953, 23622    // 600mm
         )
 
         val capabilities = PrinterCapabilitiesInfo.Builder(printerId)
-            .addMediaSize(receiptPaper, true)   // default
-            .addMediaSize(labelPaper, false)
+            .addMediaSize(receipt150, true)     // default: 150mm
+            .addMediaSize(receipt300, false)
+            .addMediaSize(receipt600, false)
             .addResolution(resolution, true)
             .setColorModes(
                 PrintAttributes.COLOR_MODE_MONOCHROME,
@@ -86,18 +76,13 @@ class LibroDiscoverySession(
             PrinterInfo.STATUS_UNAVAILABLE
         }
 
-        val printerInfo = PrinterInfo.Builder(printerId, PRINTER_NAME, status)
-            .setCapabilities(capabilities)
-            .build()
-
-        addPrinters(listOf(printerInfo))
+        addPrinters(listOf(
+            PrinterInfo.Builder(printerId, PRINTER_NAME, status)
+                .setCapabilities(capabilities)
+                .build()
+        ))
     }
 
-    override fun onStopPrinterStateTracking(printerId: PrinterId) {
-        Log.d(TAG, "onStopPrinterStateTracking")
-    }
-
-    override fun onDestroy() {
-        Log.d(TAG, "onDestroy")
-    }
+    override fun onStopPrinterStateTracking(printerId: PrinterId) {}
+    override fun onDestroy() {}
 }

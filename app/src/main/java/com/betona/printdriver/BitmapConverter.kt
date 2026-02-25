@@ -117,6 +117,91 @@ object BitmapConverter {
     }
 
     /**
+     * Trim trailing blank (all-zero) rows from monochrome data.
+     * Keeps a small margin (marginRows) after the last row with content.
+     *
+     * @param monoData 1bpp monochrome byte array
+     * @param widthBytes bytes per row (e.g. 72 for 576px)
+     * @param marginRows extra blank rows to keep after content (default 16 ≈ 2mm)
+     * @return trimmed monochrome data, or original if no trimming needed
+     */
+    fun trimTrailingWhiteRows(
+        monoData: ByteArray,
+        widthBytes: Int = DevicePrinter.PRINT_WIDTH_BYTES,
+        marginRows: Int = 16
+    ): ByteArray {
+        val totalRows = monoData.size / widthBytes
+        if (totalRows == 0) return monoData
+
+        // Scan from bottom to find last row with content
+        var lastContentRow = -1
+        for (row in totalRows - 1 downTo 0) {
+            val offset = row * widthBytes
+            for (col in 0 until widthBytes) {
+                if (monoData[offset + col] != 0.toByte()) {
+                    lastContentRow = row
+                    break
+                }
+            }
+            if (lastContentRow >= 0) break
+        }
+
+        if (lastContentRow < 0) {
+            // Entire image is blank - return minimal data
+            return ByteArray(widthBytes)
+        }
+
+        val keepRows = minOf(lastContentRow + 1 + marginRows, totalRows)
+        if (keepRows >= totalRows) return monoData
+
+        return monoData.copyOfRange(0, keepRows * widthBytes)
+    }
+
+    /**
+     * Crop white borders from bitmap (removes Chrome margins).
+     * Scans for content bounds and returns cropped bitmap.
+     *
+     * @param bitmap source bitmap
+     * @param padding extra pixels to keep around content
+     * @return cropped bitmap, or original if no white borders found
+     */
+    fun cropWhiteBorders(bitmap: Bitmap, padding: Int = 4): Bitmap {
+        val width = bitmap.width
+        val height = bitmap.height
+        var top = height
+        var bottom = 0
+        var left = width
+        var right = 0
+
+        val pixels = IntArray(width)
+        for (y in 0 until height) {
+            bitmap.getPixels(pixels, 0, width, 0, y, width, 1)
+            for (x in 0 until width) {
+                val pixel = pixels[x]
+                val r = (pixel shr 16) and 0xFF
+                val g = (pixel shr 8) and 0xFF
+                val b = pixel and 0xFF
+                val lum = (0.299 * r + 0.587 * g + 0.114 * b).toInt()
+                if (lum < 240) {
+                    if (y < top) top = y
+                    if (y > bottom) bottom = y
+                    if (x < left) left = x
+                    if (x > right) right = x
+                }
+            }
+        }
+
+        if (top > bottom || left > right) return bitmap
+
+        top = maxOf(0, top - padding)
+        bottom = minOf(height - 1, bottom + padding)
+        left = maxOf(0, left - padding)
+        right = minOf(width - 1, right + padding)
+
+        return Bitmap.createBitmap(bitmap, left, top, right - left + 1, bottom - top + 1)
+    }
+
+    /**
      * Scale bitmap to target width, maintaining aspect ratio.
      * Returns the same bitmap if already the correct width.
      */
