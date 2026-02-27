@@ -56,6 +56,34 @@
             android:text="인쇄 서비스 설정 열기"
             android:layout_marginBottom="16dp" />
 
+        <!-- School URL Setting -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="학교주소 설정"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp" />
+
+        <EditText
+            android:id="@+id/etSchoolUrl"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textUri"
+            android:singleLine="true"
+            android:hint="https://read365.edunet.net/SchoolSearch"
+            android:textSize="13sp"
+            android:padding="10dp"
+            android:background="#FAFAFA"
+            android:layout_marginBottom="8dp" />
+
+        <Button
+            android:id="@+id/btnSaveSchoolUrl"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="학교주소 저장"
+            android:layout_marginBottom="16dp" />
+
         <!-- Divider -->
         <View
             android:layout_width="match_parent"
@@ -130,13 +158,6 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="시스템 인쇄 테스트 (PrintSpooler)"
-            android:layout_marginBottom="8dp" />
-
-        <Button
-            android:id="@+id/btnWebPrint"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="🌐 웹 인쇄 (데스크톱 모드)"
             android:layout_marginBottom="8dp" />
 
         <Button

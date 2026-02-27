@@ -14,16 +14,11 @@
         android:theme="@style/Theme.LibroPrintDriver"
         tools:targetApi="26">
 
-        <!-- Settings / Test Activity -->
+        <!-- Admin Settings / Test Activity (password protected) -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:label="@string/app_name">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
+            android:label="관리자 설정" />
 
         <!-- Ladder Game Activity -->
         <activity
@@ -31,11 +26,17 @@
             android:exported="false"
             android:label="사다리 게임" />
 
-        <!-- Web Print Activity (desktop mode WebView) -->
+        <!-- Web Print Activity — Launcher (desktop mode WebView) -->
         <activity
             android:name=".WebPrintActivity"
-            android:exported="false"
-            android:label="웹 인쇄" />
+            android:exported="true"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.LibroPrintDriver.NoActionBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
 
         <!-- PrintService - registered in Settings → Print -->
         <service

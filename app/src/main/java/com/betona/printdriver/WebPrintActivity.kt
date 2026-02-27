@@ -1,23 +1,24 @@
 package com.betona.printdriver
 
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.print.PrintManager
 import android.util.Log
-import android.view.KeyEvent
-import android.view.inputmethod.EditorInfo
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.Button
-import android.widget.EditText
+import android.widget.ImageButton
 import android.widget.ProgressBar
-import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 
 /**
- * WebView browser with desktop User-Agent for printing from library systems.
- * Desktop mode ensures print buttons are visible on web pages.
+ * Kiosk-style WebView browser — launcher activity.
+ * No URL bar (prevents page departure). Navigation via back/forward/home buttons only.
+ * Print button only enabled when page contains 청구기호.
  */
 class WebPrintActivity : AppCompatActivity() {
 
@@ -25,36 +26,39 @@ class WebPrintActivity : AppCompatActivity() {
         private const val TAG = "WebPrint"
         private const val DESKTOP_USER_AGENT =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
-        private const val DEFAULT_URL = "https://read365.edunet.net/PureScreen/SchoolSearch?schoolName=%EC%86%A1%EC%9A%B4%EC%B4%88%EB%93%B1%ED%95%99%EA%B5%90&provCode=J10&neisCode=J100002752"
     }
 
     private lateinit var webView: WebView
-    private lateinit var urlBar: EditText
     private lateinit var progressBar: ProgressBar
+    private lateinit var btnPrint: ImageButton
+    private var lastLoadedSchoolUrl: String? = null
+    private var isPrinting = false
+    private var shouldClearHistory = false
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
+        supportActionBar?.hide()
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_web_print)
 
-        urlBar = findViewById(R.id.etUrl)
         progressBar = findViewById(R.id.progressBar)
         webView = findViewById(R.id.webView)
+        btnPrint = findViewById(R.id.btnPrint)
 
-        findViewById<Button>(R.id.btnGo).setOnClickListener { loadUrl() }
-        findViewById<Button>(R.id.btnPrint).setOnClickListener { printPage() }
-        findViewById<Button>(R.id.btnBack).setOnClickListener {
+        // Toolbar buttons
+        findViewById<ImageButton>(R.id.btnHome).setOnClickListener { goHome() }
+        findViewById<ImageButton>(R.id.btnBack).setOnClickListener {
             if (webView.canGoBack()) webView.goBack()
         }
-
-        urlBar.setOnEditorActionListener { _, actionId, event ->
-            if (actionId == EditorInfo.IME_ACTION_GO ||
-                (event?.keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_DOWN)) {
-                loadUrl()
-                true
-            } else false
+        findViewById<ImageButton>(R.id.btnForward).setOnClickListener {
+            if (webView.canGoForward()) webView.goForward()
+        }
+        btnPrint.setOnClickListener { printPage() }
+        findViewById<ImageButton>(R.id.btnMenu).setOnClickListener {
+            startActivity(Intent(this, MainActivity::class.java))
         }
 
+        // WebView setup
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
@@ -68,7 +72,11 @@ class WebPrintActivity : AppCompatActivity() {
 
         webView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
-                urlBar.setText(url ?: "")
+                if (shouldClearHistory) {
+                    view?.clearHistory()
+                    shouldClearHistory = false
+                }
+                checkPrintButtonVisibility()
             }
         }
 
@@ -82,26 +90,82 @@ class WebPrintActivity : AppCompatActivity() {
                 }
             }
         }
-
-        webView.loadUrl(DEFAULT_URL)
     }
 
-    private fun loadUrl() {
-        var url = urlBar.text.toString().trim()
-        if (url.isEmpty()) return
-        if (!url.startsWith("http://") && !url.startsWith("https://")) {
-            url = "https://$url"
+    override fun onResume() {
+        super.onResume()
+        if (isPrinting) {
+            isPrinting = false
+            showPostPrintDialog()
+            return
         }
+        val schoolUrl = AppPrefs.getSchoolUrl(this)
+        if (lastLoadedSchoolUrl != schoolUrl) {
+            lastLoadedSchoolUrl = schoolUrl
+            webView.loadUrl(schoolUrl)
+        }
+    }
+
+    private fun goHome() {
+        val url = AppPrefs.getSchoolUrl(this)
+        lastLoadedSchoolUrl = url
+        shouldClearHistory = true
         webView.loadUrl(url)
     }
 
+    /**
+     * Print button enabled when user has navigated away from home (search) page.
+     * e.g. book detail page showing 서명/청구기호.
+     */
+    private fun checkPrintButtonVisibility() {
+        val currentUrl = webView.url ?: ""
+        val homeUrl = AppPrefs.getSchoolUrl(this)
+        val isHome = currentUrl == homeUrl || currentUrl.isEmpty()
+        btnPrint.isEnabled = !isHome
+        btnPrint.alpha = if (!isHome) 1.0f else 0.3f
+    }
+
     private fun printPage() {
+        isPrinting = true
         val title = webView.title ?: "웹 페이지"
         Log.d(TAG, "Printing: $title")
         val printManager = getSystemService(PRINT_SERVICE) as PrintManager
         val adapter = webView.createPrintDocumentAdapter(title)
         printManager.print(title, adapter, null)
-        Toast.makeText(this, "인쇄 대화상자 열기...", Toast.LENGTH_SHORT).show()
+    }
+
+    /**
+     * After print: countdown 3→2→1 then auto-navigate home.
+     * User can cancel to stay on current page.
+     */
+    private fun showPostPrintDialog() {
+        var secondsLeft = 3
+        val dialog = AlertDialog.Builder(this)
+            .setMessage("홈으로 이동합니다... (3)")
+            .setNegativeButton("취소", null)
+            .setCancelable(true)
+            .create()
+
+        val handler = Handler(Looper.getMainLooper())
+        val countdown = object : Runnable {
+            override fun run() {
+                secondsLeft--
+                if (secondsLeft > 0) {
+                    dialog.setMessage("홈으로 이동합니다... ($secondsLeft)")
+                    handler.postDelayed(this, 1000)
+                } else {
+                    dialog.dismiss()
+                    goHome()
+                }
+            }
+        }
+
+        dialog.setOnDismissListener {
+            handler.removeCallbacks(countdown)
+        }
+
+        dialog.show()
+        handler.postDelayed(countdown, 1000)
     }
 
     override fun onBackPressed() {
