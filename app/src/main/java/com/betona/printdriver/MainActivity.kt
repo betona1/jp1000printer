@@ -7,12 +7,21 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
 import android.os.Bundle
+import android.os.CancellationSignal
+import android.os.ParcelFileDescriptor
+import android.print.PageRange
+import android.print.PrintAttributes
+import android.print.PrintDocumentAdapter
+import android.print.PrintDocumentInfo
+import android.print.PrintManager
 import android.provider.Settings
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import com.betona.printdriver.databinding.ActivityMainBinding
 import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -51,6 +60,13 @@ class MainActivity : AppCompatActivity() {
         binding.btnTestImage.setOnClickListener { testImagePrint() }
         binding.btnTestFullCut.setOnClickListener { testCutType(full = true) }
         binding.btnTestPartialCut.setOnClickListener { testCutType(full = false) }
+        binding.btnSystemPrint.setOnClickListener { testSystemPrint() }
+        binding.btnWebPrint.setOnClickListener {
+            startActivity(Intent(this, WebPrintActivity::class.java))
+        }
+        binding.btnLadderGame.setOnClickListener {
+            startActivity(Intent(this, LadderGameActivity::class.java))
+        }
     }
 
     private fun checkDeviceStatus() {
@@ -356,6 +372,76 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread { log("오류: ${e.message}") }
             }
         }.start()
+    }
+
+    // ── Test: System Print (via PrintManager) ───────────────────────────
+
+    private fun testSystemPrint() {
+        log("시스템 인쇄 테스트 (PrintSpooler 경유)...")
+        val printManager = getSystemService(PRINT_SERVICE) as PrintManager
+        val jobName = "LibroPrintDriver 테스트"
+
+        printManager.print(jobName, object : PrintDocumentAdapter() {
+            override fun onLayout(
+                oldAttributes: PrintAttributes?,
+                newAttributes: PrintAttributes,
+                cancellationSignal: CancellationSignal,
+                callback: LayoutResultCallback,
+                extras: Bundle?
+            ) {
+                Log.d(TAG, "SystemPrint: onLayout called, mediaSize=${newAttributes.mediaSize}")
+                if (cancellationSignal.isCanceled) {
+                    callback.onLayoutCancelled()
+                    return
+                }
+                val info = PrintDocumentInfo.Builder(jobName)
+                    .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
+                    .setPageCount(1)
+                    .build()
+                callback.onLayoutFinished(info, oldAttributes != newAttributes)
+            }
+
+            override fun onWrite(
+                pages: Array<out PageRange>,
+                destination: ParcelFileDescriptor,
+                cancellationSignal: CancellationSignal,
+                callback: WriteResultCallback
+            ) {
+                Log.d(TAG, "SystemPrint: onWrite called")
+                try {
+                    val pdfDoc = PdfDocument()
+                    val pageInfo = PdfDocument.PageInfo.Builder(576, 400, 0).create()
+                    val page = pdfDoc.startPage(pageInfo)
+
+                    val canvas = page.canvas
+                    val paint = Paint().apply {
+                        color = Color.BLACK
+                        textSize = 24f
+                    }
+                    canvas.drawText("시스템 인쇄 테스트", 20f, 50f, paint)
+                    canvas.drawText("PrintSpooler → PrintService", 20f, 90f, paint)
+                    canvas.drawText("LibroPrintDriver", 20f, 130f, paint)
+                    paint.textSize = 16f
+                    val time = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.KOREA).format(Date())
+                    canvas.drawText(time, 20f, 170f, paint)
+
+                    // Draw border
+                    paint.style = Paint.Style.STROKE
+                    paint.strokeWidth = 2f
+                    canvas.drawRect(10f, 10f, 566f, 390f, paint)
+
+                    pdfDoc.finishPage(page)
+                    pdfDoc.writeTo(FileOutputStream(destination.fileDescriptor))
+                    pdfDoc.close()
+
+                    callback.onWriteFinished(arrayOf(PageRange.ALL_PAGES))
+                    Log.d(TAG, "SystemPrint: onWrite complete")
+                } catch (e: Exception) {
+                    Log.e(TAG, "SystemPrint: onWrite error", e)
+                    callback.onWriteFailed(e.message)
+                }
+            }
+        }, null)
     }
 
     // ── Logging ──────────────────────────────────────────────────────────

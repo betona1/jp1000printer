@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -22,6 +25,18 @@
             </intent-filter>
         </activity>
 
+        <!-- Ladder Game Activity -->
+        <activity
+            android:name=".LadderGameActivity"
+            android:exported="false"
+            android:label="사다리 게임" />
+
+        <!-- Web Print Activity (desktop mode WebView) -->
+        <activity
+            android:name=".WebPrintActivity"
+            android:exported="false"
+            android:label="웹 인쇄" />
+
         <!-- PrintService - registered in Settings → Print -->
         <service
             android:name=".LibroPrintService"
@@ -34,6 +49,15 @@
                 android:name="android.print.printservice"
                 android:resource="@xml/print_service_info" />
         </service>
+
+        <!-- Auto-configure PrintService after reboot (A40i) -->
+        <receiver
+            android:name=".BootCompletedReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
 
     </application>
 

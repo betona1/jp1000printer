@@ -1,0 +1,10 @@
+# LibroPrintDriver init service for A40i (Android 7)
+# Install to: /system/etc/init/printdriver.rc
+on property:sys.boot_completed=1
+    start configure_print
+
+service configure_print /system/bin/sh /system/bin/configure_print.sh
+    class late_start
+    user root
+    oneshot
+    disabled

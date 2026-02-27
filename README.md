@@ -4,42 +4,108 @@ JY-P1000 키오스크 내장 3인치 감열 프린터용 Android PrintService �
 
 ## 장치 정보
 
-| 항목 | 내용 |
-|------|------|
-| 기기 | JY-P1000 (JV COMPANY) |
-| SoC | RK3568 |
-| OS | Android 11 |
-| 프린터 경로 | `/dev/printer` |
-| 인쇄 폭 | 576px (72 bytes/row), 75mm |
-| 해상도 | 203 DPI |
-| 밝기 | 1~8 (기본값 4) |
-| 커터 | ESC/POS GS V 0 자동 절단 |
+| 항목 | JY-P1000 (standard) | A40i (a40) |
+|------|------|------|
+| 기기 | JY-P1000 (JV COMPANY) | QUAD-CORE A40i JYA40i |
+| SoC | RK3568 | Allwinner A40i |
+| OS | Android 11 | Android 7.1.1 |
+| DPI | 320 (hdpi) | 160 (mdpi) |
+| 패키지명 | `com.betona.printdriver` | `com.android.printdriver` |
+| 프린터 경로 | `/dev/printer` | `/dev/printer` |
+| 인쇄 폭 | 576px (72 bytes/row), 75mm | 576px (72 bytes/row), 75mm |
+| 해상도 | 203 DPI | 203 DPI |
+| 밝기 | 1~8 (기본값 4) | 1~8 (기본값 4) |
+| 커터 | ESC/POS GS V 0 자동 절단 | ESC/POS GS V 0 자동 절단 |
+
+## 빌드 플레이버
+
+디바이스별 빌드를 위해 Product Flavor를 사용합니다.
+
+| 플레이버 | 대상 기기 | applicationId | 비고 |
+|----------|-----------|---------------|------|
+| `standard` | JY-P1000 (Android 11) | `com.betona.printdriver` | 기본 |
+| `a40` | A40i (Android 7) | `com.android.printdriver` | BackgroundManagerService 화이트리스트 우회 |
+
+```bash
+# JY-P1000 빌드
+./gradlew assembleStandardRelease
+
+# A40i 빌드
+./gradlew assembleA40Release
+
+# 전체 빌드
+./gradlew assembleRelease
+```
+
+> **`com.android.printdriver` 패키지명 이유**: A40i 기기는 Allwinner/Softwinner의 `BackgroundManagerService`가 `com.android`, `com.google` 등의 접두사로 시작하지 않는 앱의 서비스를 강제 종료합니다. 이를 우회하기 위해 `com.android.printdriver` applicationId를 사용합니다. 상세 내용은 아래 [A40i 디바이스 이슈](#a40i-디바이스-이슈-android-7) 섹션 참조.
 
 ## 설치 및 설정
 
-### 1. APK 설치
+### JY-P1000 (standard)
+
+#### 1. APK 설치
 
 ```bash
-# 디버그 빌드
-./gradlew assembleDebug
-
-# 기기에 설치
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+./gradlew assembleStandardDebug
+adb install -r app/build/outputs/apk/standard/debug/app-standard-debug.apk
 ```
 
-### 2. PrintService 활성화
-
-앱 설치 후 반드시 인쇄 서비스를 수동으로 활성화해야 합니다.
+#### 2. PrintService 활성화
 
 1. **설정** > **연결된 기기** > **인쇄** (또는 앱 내 **"인쇄 서비스 설정 열기"** 버튼)
 2. **LibroPrintDriver** 항목을 찾아서 **ON** 으로 전환
 3. 활성화되면 "JY-P1000 감열 프린터" 가 프린터 목록에 나타남
 
-### 3. 인쇄 테스트
+#### 3. 인쇄 테스트
 
 - 앱 메인 화면에서 **연결 테스트** 버튼으로 `/dev/printer` 연결 확인
 - **이미지 인쇄 테스트**, **라벨 인쇄 테스트** 등으로 직접 인쇄 확인
 - Chrome, PDF 뷰어 등에서 **인쇄** > **JY-P1000 감열 프린터** 선택하여 PrintService 인쇄 확인
+
+### A40i (a40)
+
+#### 1. APK 설치
+
+```bash
+./gradlew assembleA40Release
+adb install -r app/build/outputs/apk/a40/release/app-a40-release.apk
+```
+
+#### 2. PrintService 활성화 (adb 필요)
+
+A40i에서는 설정 UI에서 인쇄 서비스가 보이지 않을 수 있습니다. adb로 직접 활성화:
+
+```bash
+adb shell settings put secure enabled_print_services com.android.printdriver/.LibroPrintService
+```
+
+#### 3. PrintSpooler 패치 (최초 1회)
+
+A40i의 기본 PrintSpooler.apk에는 mdpi 해상도에서 크래시하는 drawable 버그가 있습니다. 패치 필요:
+
+```bash
+# 1. 패치된 PrintSpooler.apk를 기기에 푸시
+adb push PrintSpooler_patched.apk /sdcard/
+
+# 2. root 권한으로 교체
+adb shell su 0 mount -o remount,rw /system
+adb shell su 0 cp /sdcard/PrintSpooler_patched.apk /system/app/PrintSpooler/PrintSpooler.apk
+adb shell su 0 chmod 644 /system/app/PrintSpooler/PrintSpooler.apk
+
+# 3. 위치 권한 부여 (PrintSpooler가 요구하지만 선언하지 않음)
+adb shell pm grant com.android.printspooler android.permission.ACCESS_COARSE_LOCATION
+adb shell pm grant com.android.printspooler android.permission.ACCESS_FINE_LOCATION
+
+# 4. packages.xml 인증서 업데이트 (별도 문서 참조)
+
+# 5. 재부팅
+adb reboot
+```
+
+#### 4. 인쇄 테스트
+
+- **Firefox** (v143, Android 7 지원 마지막 버전)에서 인쇄
+- Chrome은 Android 7에서 인쇄 메뉴가 제대로 작동하지 않음
 
 ## 인쇄 방식
 
@@ -98,12 +164,15 @@ DevicePrinter.write(EscPosCommands.fullCut())      // GS V 0 전체 절단
 
 ```
 app/src/main/java/com/betona/printdriver/
-├── LibroPrintService.kt    # Android PrintService (PDF→인쇄)
+├── LibroPrintService.kt     # Android PrintService (PDF→인쇄)
 ├── LibroDiscoverySession.kt # 프린터 검색 (75mm 용지 설정)
 ├── DevicePrinter.kt         # 프린터 I/O 싱글톤 (jyndklib 래핑)
 ├── EscPosCommands.kt        # ESC/POS 명령어 빌더
 ├── BitmapConverter.kt       # Bitmap→흑백 변환, 크롭, 트림
-└── MainActivity.kt          # 설정 UI + 테스트 버튼
+├── MainActivity.kt          # 설정 UI + 테스트 버튼
+├── LadderGameActivity.kt    # 사다리 게임 (Jetpack Compose)
+├── LadderGenerator.kt       # 사다리 생성 알고리즘
+└── LadderView.kt            # 사다리 Canvas 렌더링 + 인쇄용 Bitmap
 
 jyndklib/                    # 네이티브 라이브러리 (JY-P1000 전용)
 └── jyNativeClass            # JNI: open, close, printString, rawData, feed 등
@@ -126,10 +195,85 @@ LibroDiscoverySession에서 3가지 용지 크기를 제공합니다:
 | Gradle | 8.4 |
 | Android Gradle Plugin | 8.3.0 |
 | Kotlin | 1.9.0 |
+| Jetpack Compose BOM | 2023.10.01 |
+| Compose Compiler | 1.5.2 |
 | compileSdk | 34 |
 | targetSdk | 26 |
 | minSdk | 24 |
 | NDK (jyndklib) | 22.1.7171670 |
+
+## A40i 디바이스 이슈 (Android 7)
+
+A40i (Allwinner A40i, Android 7.1.1) 기기에서 PrintService를 사용하기 위해 해결해야 하는 3가지 문제:
+
+### 1. BackgroundManagerService 화이트리스트
+
+**문제**: Allwinner/Softwinner 커스텀 프레임워크의 `BackgroundManagerService`가 화이트리스트에 없는 앱의 백그라운드 서비스를 강제 종료합니다.
+
+```
+skipService com.betona.printdriver/.LibroPrintService because of activity not started!
+```
+
+화이트리스트는 하드코딩되어 있으며 `startsWith()`로 체크:
+- `com.android`, `com.google`, `com.softwinner`, `tv.fun` 등의 접두사
+
+**시도했지만 실패한 방법**:
+- `settings put global background_manager_enabled 0` — 무시됨
+- `deviceidle whitelist` — 영향 없음
+- `cmd appops set RUN_IN_BACKGROUND allow` — 영향 없음
+- `/system/priv-app/`으로 이동 — 영향 없음
+
+**해결**: `com.android.printdriver` applicationId 사용 (빌드 플레이버 `a40`)
+
+### 2. PrintSpooler drawable 크래시
+
+**문제**: 기본 PrintSpooler.apk의 `res/drawable/ic_expand_more.xml`과 `ic_expand_less.xml`이 자기 자신을 참조하는 selector입니다.
+
+```xml
+<!-- ic_expand_more.xml — 자기참조! -->
+<selector>
+    <item><bitmap android:src="@drawable/ic_expand_more" ... /></item>
+</selector>
+```
+
+hdpi (240+) 기기에서는 `res/drawable-hdpi-v4/`의 PNG가 우선 로딩되어 문제없지만, A40i는 mdpi (160dpi)이므로 XML → XML 무한 재귀 → `Resources$NotFoundException` 크래시.
+
+**해결**: apktool로 PrintSpooler 디컴파일 후 `res/drawable-mdpi-v4/` 디렉터리에 hdpi PNG 복사, 재빌드 후 AOSP 테스트 키로 서명. `packages.xml`에 새 인증서 등록.
+
+### 3. PrintSpooler 위치 권한
+
+**문제**: PrintSpooler가 `fused` 위치 제공자에 접근하지만 `ACCESS_COARSE_LOCATION` 권한이 없어서 `SecurityException` 크래시.
+
+```
+SecurityException: "fused" location provider requires ACCESS_COARSE_LOCATION or ACCESS_FINE_LOCATION
+```
+
+**해결**: `pm grant`로 권한 수동 부여
+
+```bash
+pm grant com.android.printspooler android.permission.ACCESS_COARSE_LOCATION
+pm grant com.android.printspooler android.permission.ACCESS_FINE_LOCATION
+```
+
+### 4. 브라우저 인쇄 지원
+
+| 브라우저 | 버전 | 인쇄 지원 | 비고 |
+|----------|------|-----------|------|
+| Chrome | 119 (Android 7 최신) | 인쇄 메뉴 없음 | 공유→인쇄 동작 안함 |
+| Firefox | 143 (Android 7 최신) | 인쇄 지원 | 메뉴 → 인쇄 |
+
+### packages.xml 인증서 업데이트
+
+PrintSpooler를 AOSP 테스트 키로 재서명한 경우, `/data/system/packages.xml`의 인증서 정보를 업데이트해야 합니다:
+
+1. 새 인증서 인덱스를 `<keyset-settings>`의 `<keys>` 섹션에 추가
+2. PrintSpooler 패키지 항목의 `<sigs>`에서 새 인증서 인덱스 참조
+3. 재부팅 후 `enabled_print_services` 설정 재적용 필요
+
+```bash
+# 재부팅 후 매번 실행
+adb shell settings put secure enabled_print_services com.android.printdriver/.LibroPrintService
+```
 
 ## 알려진 제한사항
 
@@ -137,3 +281,5 @@ LibroDiscoverySession에서 3가지 용지 크기를 제공합니다:
 - `jyPrinterRawData()` 사용 후 `jyPrinterClose()` 호출 시 커트가 작동하지 않음 → 사용하지 않음
 - `FileOutputStream`으로 `/dev/printer` 직접 쓰기 불가 (EINVAL) → 반드시 jyndklib 사용
 - 프린터 fd는 프로세스 종료 시 OS에서 자동 해제
+- A40i: `enabled_print_services` 설정이 재부팅 시 초기화될 수 있음 → adb로 재설정 필요
+- A40i: Chrome에서 인쇄 불가 → Firefox 143 사용
