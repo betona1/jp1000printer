@@ -16,6 +16,8 @@ import android.print.PrintAttributes
 import android.print.PrintDocumentAdapter
 import android.print.PrintDocumentInfo
 import android.print.PrintManager
+import android.net.Uri
+import android.os.Environment
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
@@ -63,11 +65,14 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import android.app.TimePickerDialog
+import androidx.compose.runtime.mutableStateListOf
 
 /**
  * Admin settings & test UI — Jetpack Compose Material3.
@@ -88,13 +93,22 @@ class MainActivity : ComponentActivity() {
     private var deviceStatus by mutableStateOf("확인 중...")
     private var schoolUrl by mutableStateOf("")
     private var autoStartEnabled by mutableStateOf(false)
+    private var showPowerButton by mutableStateOf(false)
+    private var showSchedule by mutableStateOf(false)
     private var testText by mutableStateOf("")
+    private val schedules = mutableStateListOf(
+        DaySchedule(), DaySchedule(), DaySchedule(), DaySchedule(),
+        DaySchedule(), DaySchedule(), DaySchedule()
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         schoolUrl = AppPrefs.getSchoolUrl(this)
         autoStartEnabled = AppPrefs.getAutoStart(this)
+        showPowerButton = AppPrefs.getShowPowerButton(this)
+        showSchedule = AppPrefs.getShowSchedule(this)
+        for (i in 0..6) schedules[i] = AppPrefs.getDaySchedule(this, i)
 
         setContent {
             AdminTheme {
@@ -179,8 +193,11 @@ class MainActivity : ComponentActivity() {
                 CenterAlignedTopAppBar(
                     title = { Text("관리자 설정", fontWeight = FontWeight.Bold) },
                     navigationIcon = {
-                        TextButton(onClick = { finish() }) {
-                            Text("←", color = Color.White, fontSize = 22.sp)
+                        TextButton(onClick = {
+                            startActivity(Intent(this@MainActivity, WebPrintActivity::class.java))
+                            finish()
+                        }) {
+                            Text("← 홈", color = Color.White, fontSize = 18.sp)
                         }
                     },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -200,6 +217,7 @@ class MainActivity : ComponentActivity() {
             ) {
                 SchoolUrlCard()
                 AppSettingsCard()
+                ScheduleCard()
                 DeviceStatusCard()
                 DirectPrintTestCard()
                 TextPrintCard()
@@ -271,8 +289,146 @@ class MainActivity : ComponentActivity() {
                         }
                     )
                 }
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("홈 화면 종료버튼 표시")
+                    Switch(
+                        checked = showPowerButton,
+                        onCheckedChange = {
+                            showPowerButton = it
+                            AppPrefs.setShowPowerButton(this@MainActivity, it)
+                        }
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("홈 화면 시작/종료시간 표시")
+                    Switch(
+                        checked = showSchedule,
+                        onCheckedChange = {
+                            showSchedule = it
+                            AppPrefs.setShowSchedule(this@MainActivity, it)
+                        }
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                FilledTonalButton(
+                    onClick = { showApkInstallDialog() },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("APK 설치 (Downloads 폴더)") }
+                Spacer(Modifier.height(12.dp))
+                Button(
+                    onClick = {
+                        val intent = Intent(this@MainActivity, WebPrintActivity::class.java)
+                        intent.putExtra(WebPrintActivity.EXTRA_SCREEN_OFF_NOW, true)
+                        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        startActivity(intent)
+                        finish()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) { Text("화면 끄기") }
             }
         }
+    }
+
+    @Composable
+    private fun ScheduleCard() {
+        val dayNames = listOf("월", "화", "수", "목", "금", "토", "일")
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    "자동 시작/종료 스케줄",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "종료 시간에 자동 전원 OFF, 시작 시간에 RTC 알람으로 자동 전원 ON",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                dayNames.forEachIndexed { index, name ->
+                    ScheduleRow(index, name)
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun ScheduleRow(dayIndex: Int, dayName: String) {
+        val sched = schedules[dayIndex]
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                dayName,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(end = 4.dp)
+            )
+            Switch(
+                checked = sched.enabled,
+                onCheckedChange = {
+                    schedules[dayIndex] = sched.copy(enabled = it)
+                    saveAndReschedule(dayIndex)
+                },
+                modifier = Modifier.padding(end = 4.dp)
+            )
+            TextButton(
+                onClick = {
+                    TimePickerDialog(this@MainActivity, { _, h, m ->
+                        schedules[dayIndex] = schedules[dayIndex].copy(startHour = h, startMin = m)
+                        saveAndReschedule(dayIndex)
+                    }, sched.startHour, sched.startMin, true).show()
+                },
+                enabled = sched.enabled
+            ) {
+                Text(
+                    String.format("%02d:%02d", sched.startHour, sched.startMin),
+                    fontSize = 14.sp,
+                    color = if (sched.enabled) MaterialTheme.colorScheme.primary
+                           else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                )
+            }
+            Text("~", modifier = Modifier.padding(horizontal = 2.dp))
+            TextButton(
+                onClick = {
+                    TimePickerDialog(this@MainActivity, { _, h, m ->
+                        schedules[dayIndex] = schedules[dayIndex].copy(endHour = h, endMin = m)
+                        saveAndReschedule(dayIndex)
+                    }, sched.endHour, sched.endMin, true).show()
+                },
+                enabled = sched.enabled
+            ) {
+                Text(
+                    String.format("%02d:%02d", sched.endHour, sched.endMin),
+                    fontSize = 14.sp,
+                    color = if (sched.enabled) MaterialTheme.colorScheme.error
+                           else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                )
+            }
+        }
+    }
+
+    private fun saveAndReschedule(dayIndex: Int) {
+        AppPrefs.setDaySchedule(this, dayIndex, schedules[dayIndex])
+        PowerScheduleManager.scheduleNext(this)
     }
 
     @Composable
@@ -667,6 +823,42 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }, null)
+    }
+
+    // ── APK Install ────────────────────────────────────────────────────────
+
+    private fun showApkInstallDialog() {
+        val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        val apks = dir.listFiles(java.io.FileFilter { it.name.endsWith(".apk", true) })
+            ?.sortedByDescending { it.lastModified() } ?: emptyList()
+        if (apks.isEmpty()) {
+            Toast.makeText(this, "Downloads 폴더에 APK 없음", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val names = apks.map { it.name }.toTypedArray()
+        android.app.AlertDialog.Builder(this)
+            .setTitle("설치할 APK 선택")
+            .setItems(names) { _, i -> installApk(apks[i]) }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    private fun installApk(file: File) {
+        try {
+            val uri = FileProvider.getUriForFile(
+                this,
+                "${applicationContext.packageName}.fileprovider",
+                file
+            )
+            val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
+                data = uri
+                flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "APK install error", e)
+            Toast.makeText(this, "설치 오류: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 
     // ── Logging ──────────────────────────────────────────────────────────

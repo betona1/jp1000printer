@@ -116,9 +116,9 @@ object DevicePrinter {
             offset = end
         }
 
-        // Combine feed + cut into single call
+        // Feed + cut via sync write to ensure cut is fully processed
         val cutCmd = if (fullCut) EscPosCommands.fullCut() else EscPosCommands.partialCut()
-        write(EscPosCommands.feedLines(4) + cutCmd)
+        writeSync(EscPosCommands.feedLines(4) + cutCmd)
         Log.d(TAG, "printBitmapAndCut: done (${if (fullCut) "full" else "partial"} cut)")
     }
 
@@ -146,7 +146,7 @@ object DevicePrinter {
      */
     fun feedAndCut(fullCut: Boolean = true) {
         val cutCmd = if (fullCut) EscPosCommands.fullCut() else EscPosCommands.partialCut()
-        write(EscPosCommands.feedLines(4) + cutCmd)
+        writeSync(EscPosCommands.feedLines(4) + cutCmd)
         Log.d(TAG, "feedAndCut: ${if (fullCut) "full" else "partial"} cut sent")
     }
 

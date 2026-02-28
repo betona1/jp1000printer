@@ -2,12 +2,23 @@ package com.betona.printdriver
 
 import android.content.Context
 import android.util.Log
+import java.io.File
+
+data class DaySchedule(
+    val enabled: Boolean = false,
+    val startHour: Int = 9,
+    val startMin: Int = 0,
+    val endHour: Int = 18,
+    val endMin: Int = 0
+)
 
 object AppPrefs {
     private const val TAG = "AppPrefs"
     private const val PREFS_NAME = "libro_prefs"
     private const val KEY_SCHOOL_URL = "school_url"
     private const val KEY_AUTO_START = "auto_start"
+    private const val KEY_SHOW_POWER_BTN = "show_power_btn"
+    private const val KEY_SHOW_SCHEDULE = "show_schedule"
     private const val DEFAULT_SCHOOL_URL = "https://read365.edunet.net/SchoolSearch"
 
     private const val BOOT_SCRIPT = "/system/bin/libro_autostart.sh"
@@ -57,22 +68,28 @@ object AppPrefs {
 
                 if (enabled) {
                     // Write boot shell script (sleep 15 to wait for ActivityManager)
-                    su("echo '#!/system/bin/sh' > $BOOT_SCRIPT")
-                    su("echo 'sleep 15' >> $BOOT_SCRIPT")
-                    su("echo 'am start -n $component' >> $BOOT_SCRIPT")
-                    su("echo 'sleep 3' >> $BOOT_SCRIPT")
-                    su("echo 'am start -n $component' >> $BOOT_SCRIPT")
+                    val bootFile = File(context.filesDir, "libro_autostart.sh")
+                    bootFile.writeText(
+                        "#!/system/bin/sh\nsleep 15\nam start -n $component\nsleep 3\nam start -n $component\n"
+                    )
+                    su("cp ${bootFile.absolutePath} $BOOT_SCRIPT")
                     su("chmod 755 $BOOT_SCRIPT")
+                    bootFile.delete()
 
-                    // Write init .rc file
-                    su("echo 'service libro_autostart $BOOT_SCRIPT' > $BOOT_RC")
-                    su("echo '    user root' >> $BOOT_RC")
-                    su("echo '    oneshot' >> $BOOT_RC")
-                    su("echo '    disabled' >> $BOOT_RC")
-                    su("echo '' >> $BOOT_RC")
-                    su("echo 'on property:sys.boot_completed=1' >> $BOOT_RC")
-                    su("echo '    start libro_autostart' >> $BOOT_RC")
+                    // Write init .rc file (autostart only, no shutdown service)
+                    val rcFile = File(context.filesDir, "libro_autostart.rc")
+                    rcFile.writeText(
+                        "service libro_autostart $BOOT_SCRIPT\n" +
+                        "    user root\n" +
+                        "    oneshot\n" +
+                        "    disabled\n" +
+                        "\n" +
+                        "on property:sys.boot_completed=1\n" +
+                        "    start libro_autostart\n"
+                    )
+                    su("cp ${rcFile.absolutePath} $BOOT_RC")
                     su("chmod 644 $BOOT_RC")
+                    rcFile.delete()
 
                     Log.i(TAG, "Boot script installed: $BOOT_RC")
                 } else {
@@ -86,6 +103,63 @@ object AppPrefs {
                 try { su(REMOUNT_RO) } catch (_: Exception) {}
             }
         }.start()
+    }
+
+    fun getShowPowerButton(context: Context): Boolean {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_SHOW_POWER_BTN, false)
+    }
+
+    fun setShowPowerButton(context: Context, show: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_SHOW_POWER_BTN, show).apply()
+    }
+
+    fun getShowSchedule(context: Context): Boolean {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_SHOW_SCHEDULE, false)
+    }
+
+    fun setShowSchedule(context: Context, show: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_SHOW_SCHEDULE, show).apply()
+    }
+
+    /** Get today's schedule for display */
+    fun getTodayScheduleText(context: Context): String? {
+        val today = java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_WEEK)
+        val dayIndex = when (today) {
+            java.util.Calendar.MONDAY -> 0; java.util.Calendar.TUESDAY -> 1
+            java.util.Calendar.WEDNESDAY -> 2; java.util.Calendar.THURSDAY -> 3
+            java.util.Calendar.FRIDAY -> 4; java.util.Calendar.SATURDAY -> 5
+            java.util.Calendar.SUNDAY -> 6; else -> 0
+        }
+        val sched = getDaySchedule(context, dayIndex)
+        if (!sched.enabled) return null
+        return String.format("%02d:%02d~%02d:%02d", sched.startHour, sched.startMin, sched.endHour, sched.endMin)
+    }
+
+    // ── Schedule ──────────────────────────────────────────────────────
+
+    fun getDaySchedule(context: Context, dayIndex: Int): DaySchedule {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return DaySchedule(
+            enabled = prefs.getBoolean("sched_${dayIndex}_on", false),
+            startHour = prefs.getInt("sched_${dayIndex}_sh", 9),
+            startMin = prefs.getInt("sched_${dayIndex}_sm", 0),
+            endHour = prefs.getInt("sched_${dayIndex}_eh", 18),
+            endMin = prefs.getInt("sched_${dayIndex}_em", 0)
+        )
+    }
+
+    fun setDaySchedule(context: Context, dayIndex: Int, schedule: DaySchedule) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putBoolean("sched_${dayIndex}_on", schedule.enabled)
+            .putInt("sched_${dayIndex}_sh", schedule.startHour)
+            .putInt("sched_${dayIndex}_sm", schedule.startMin)
+            .putInt("sched_${dayIndex}_eh", schedule.endHour)
+            .putInt("sched_${dayIndex}_em", schedule.endMin)
+            .apply()
     }
 
     private fun su(cmd: String) {

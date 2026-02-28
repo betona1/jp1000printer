@@ -4,7 +4,7 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <!-- Toolbar: [Home] [Back] [Forward] ... [Print] [Menu] -->
+    <!-- Toolbar: [Home] [Back] [Forward] ... [Power] ... [Print] [Menu] -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="52dp"
@@ -40,6 +40,34 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="앞으로"
             android:padding="10dp" />
+
+        <!-- Spacer -->
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <!-- Schedule time display (center area) -->
+        <TextView
+            android:id="@+id/txtSchedule"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:visibility="gone"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp" />
+
+        <!-- Power Off button (center area) -->
+        <ImageButton
+            android:id="@+id/btnPower"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:src="@drawable/ic_power"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="전원 끄기"
+            android:padding="10dp"
+            android:visibility="gone" />
 
         <!-- Spacer -->
         <View

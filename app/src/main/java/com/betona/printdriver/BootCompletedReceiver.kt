@@ -44,6 +44,9 @@ class BootCompletedReceiver : BroadcastReceiver() {
 
                 Log.i(TAG, "Print service configuration complete")
 
+                // Schedule next auto-shutdown if schedule is configured
+                PowerScheduleManager.scheduleNext(context)
+
                 // Auto-start app if enabled (use am start via su for Android 7 compatibility)
                 if (AppPrefs.getAutoStart(context)) {
                     Log.i(TAG, "Auto-start enabled, launching app via am start...")
