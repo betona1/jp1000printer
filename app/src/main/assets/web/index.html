@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LibroPrintDriver 관리</title>
+    <link rel="stylesheet" href="/web/style.css?v=3">
+</head>
+<body>
+    <!-- Login -->
+    <div id="login-view" class="view">
+        <div class="login-card">
+            <h1>LibroPrintDriver</h1>
+            <p class="subtitle">웹 관리 인터페이스</p>
+            <form id="login-form">
+                <input type="text" id="username" value="admin" placeholder="아이디" autocomplete="username" required>
+                <input type="password" id="password" placeholder="비밀번호" autocomplete="current-password" required>
+                <button type="submit" class="btn btn-primary">로그인</button>
+                <p id="login-error" class="error" hidden></p>
+            </form>
+        </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dashboard-view" class="view" style="display:none">
+        <header>
+            <h1>LibroPrintDriver</h1>
+            <button id="logout-btn" class="btn btn-sm">로그아웃</button>
+        </header>
+
+        <main>
+            <!-- Printer Status -->
+            <section class="card">
+                <h2>프린터 상태</h2>
+                <div class="status-grid">
+                    <div class="status-item">
+                        <span class="status-dot" id="dot-paper"></span>
+                        <span>용지</span>
+                        <span class="status-label" id="lbl-paper">-</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-dot" id="dot-cover"></span>
+                        <span>커버</span>
+                        <span class="status-label" id="lbl-cover">-</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-dot" id="dot-overheat"></span>
+                        <span>과열</span>
+                        <span class="status-label" id="lbl-overheat">-</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-dot" id="dot-connection"></span>
+                        <span>연결</span>
+                        <span class="status-label" id="lbl-connection">-</span>
+                    </div>
+                </div>
+                <p class="update-time">마지막 갱신: <span id="last-update">-</span></p>
+            </section>
+
+            <!-- Actions -->
+            <section class="card">
+                <h2>프린터 제어</h2>
+                <div class="btn-group">
+                    <button class="btn btn-primary" onclick="App.testPrint()">테스트 인쇄</button>
+                    <button class="btn" onclick="App.feed()">용지 이송</button>
+                    <button class="btn" onclick="App.cut()">용지 절단</button>
+                </div>
+                <p id="action-result" class="action-result" hidden></p>
+            </section>
+
+            <!-- Device Info -->
+            <section class="card">
+                <h2>기기 정보</h2>
+                <table class="info-table">
+                    <tr><td>모델</td><td id="info-model">-</td></tr>
+                    <tr><td>Android</td><td id="info-android">-</td></tr>
+                    <tr><td>IP 주소</td><td id="info-ip">-</td></tr>
+                    <tr><td>앱 버전</td><td id="info-version">-</td></tr>
+                    <tr><td>가동 시간</td><td id="info-uptime">-</td></tr>
+                </table>
+            </section>
+
+            <!-- Settings -->
+            <section class="card">
+                <h2>설정</h2>
+                <div class="setting-row">
+                    <label for="setting-url">학교 URL</label>
+                    <div class="setting-input-group">
+                        <input type="url" id="setting-url" placeholder="https://...">
+                        <button class="btn btn-sm" onclick="App.saveSettings()">저장</button>
+                    </div>
+                </div>
+                <p id="settings-result" class="action-result" hidden></p>
+            </section>
+        </main>
+    </div>
+
+    <script src="/web/app.js?v=3"></script>
+</body>
+</html>

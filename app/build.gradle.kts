@@ -82,6 +82,9 @@ dependencies {
     implementation(libs.compose.foundation)
     implementation(libs.activity.compose)
 
+    // NanoHTTPD — embedded web server for management interface
+    implementation("org.nanohttpd:nanohttpd:2.3.1")
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
