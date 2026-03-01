@@ -2,98 +2,140 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical">
+    android:orientation="vertical"
+    android:soundEffectsEnabled="false">
 
-    <!-- Toolbar: [Home] [Back] [Forward] ... [Power] ... [Print] [Menu] -->
+    <!-- Toolbar: [Home <  > Schedule] ... [Power Rotate] ... [Cut Clock Menu] -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="52dp"
+        android:layout_height="40dp"
         android:orientation="horizontal"
-        android:paddingStart="4dp"
-        android:paddingEnd="4dp"
+        android:paddingStart="2dp"
+        android:paddingEnd="2dp"
         android:background="#1565C0"
         android:gravity="center_vertical">
 
+        <!-- ═══ LEFT GROUP ═══ -->
+
         <ImageButton
             android:id="@+id/btnHome"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
             android:src="@drawable/ic_home"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="홈"
-            android:padding="10dp" />
+            android:padding="8dp" />
 
         <ImageButton
             android:id="@+id/btnBack"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
             android:src="@drawable/ic_arrow_back"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="뒤로"
-            android:padding="10dp" />
+            android:padding="8dp" />
 
         <ImageButton
             android:id="@+id/btnForward"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
             android:src="@drawable/ic_arrow_forward"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="앞으로"
-            android:padding="10dp" />
+            android:padding="8dp" />
 
-        <!-- Spacer -->
-        <View
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:layout_weight="1" />
+        <ImageButton
+            android:id="@+id/btnLadderGame"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:src="@drawable/ic_ladder_game"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="사다리 게임"
+            android:padding="7dp"
+            android:layout_marginStart="4dp"
+            android:visibility="gone" />
 
-        <!-- Schedule time display (center area) -->
+        <ImageButton
+            android:id="@+id/btnBingoGame"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:src="@drawable/ic_bingo_game"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="빙고 게임"
+            android:padding="7dp"
+            android:visibility="gone" />
+
         <TextView
             android:id="@+id/txtSchedule"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="#FFFFFF"
-            android:textSize="13sp"
-            android:visibility="gone"
-            android:paddingStart="4dp"
-            android:paddingEnd="4dp" />
-
-        <!-- Power Off button (center area) -->
-        <ImageButton
-            android:id="@+id/btnPower"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:src="@drawable/ic_power"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="전원 끄기"
-            android:padding="10dp"
+            android:textColor="#CCFFFFFF"
+            android:textSize="11sp"
+            android:paddingStart="6dp"
+            android:paddingEnd="4dp"
             android:visibility="gone" />
 
-        <!-- Spacer -->
+        <!-- ═══ SPACER ═══ -->
         <View
             android:layout_width="0dp"
             android:layout_height="0dp"
             android:layout_weight="1" />
 
+        <!-- ═══ CENTER GROUP ═══ -->
+
         <ImageButton
-            android:id="@+id/btnPrint"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:src="@drawable/ic_print"
+            android:id="@+id/btnPower"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:src="@drawable/ic_power"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="인쇄"
-            android:padding="10dp"
-            android:enabled="false"
-            android:alpha="0.3" />
+            android:contentDescription="전원 끄기"
+            android:padding="8dp"
+            android:visibility="gone" />
+
+        <ImageButton
+            android:id="@+id/btnRotate"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:src="@drawable/ic_screen_rotation"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="화면 회전"
+            android:padding="8dp" />
+
+        <!-- ═══ SPACER ═══ -->
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <!-- ═══ RIGHT GROUP ═══ -->
+
+        <ImageButton
+            android:id="@+id/btnCutMode"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:src="@drawable/ic_cut_full"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="절단 모드"
+            android:padding="8dp" />
+
+        <TextView
+            android:id="@+id/txtClock"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#CCFFFFFF"
+            android:textSize="12sp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp" />
 
         <ImageButton
             android:id="@+id/btnMenu"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
             android:src="@drawable/ic_menu"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="설정"
-            android:padding="10dp" />
+            android:padding="8dp" />
 
     </LinearLayout>
 

@@ -1,6 +1,7 @@
 const App = (() => {
     let token = localStorage.getItem('token');
     let pollTimer = null;
+    const DAY_NAMES = ['월', '화', '수', '목', '금', '토', '일'];
 
     // ── API Helper ──────────────────────────
     async function api(method, path, body) {
@@ -23,16 +24,27 @@ const App = (() => {
     function showLogin() {
         document.getElementById('login-view').style.display = 'flex';
         document.getElementById('dashboard-view').style.display = 'none';
+        document.getElementById('password-change-modal').style.display = 'none';
         stopPolling();
     }
 
     function showDashboard() {
         document.getElementById('login-view').style.display = 'none';
+        document.getElementById('password-change-modal').style.display = 'none';
         document.getElementById('dashboard-view').style.display = 'block';
         refreshStatus();
         refreshDevice();
         refreshSettings();
         startPolling();
+    }
+
+    function showPasswordChangeModal() {
+        document.getElementById('login-view').style.display = 'none';
+        document.getElementById('dashboard-view').style.display = 'none';
+        document.getElementById('password-change-modal').style.display = 'flex';
+        document.getElementById('new-password').value = '';
+        document.getElementById('confirm-password').value = '';
+        document.getElementById('pw-change-error').hidden = true;
     }
 
     // ── Login / Logout ──────────────────────
@@ -57,7 +69,11 @@ const App = (() => {
             if (json.success) {
                 token = json.data.token;
                 localStorage.setItem('token', token);
-                showDashboard();
+                if (json.data.requirePasswordChange) {
+                    showPasswordChangeModal();
+                } else {
+                    showDashboard();
+                }
             } else {
                 errEl.style.color = '';
                 errEl.textContent = json.error;
@@ -75,6 +91,90 @@ const App = (() => {
         token = null;
         localStorage.removeItem('token');
         showLogin();
+    }
+
+    // ── Password Change ─────────────────────
+    async function changePassword() {
+        const newPw = document.getElementById('new-password').value;
+        const confirmPw = document.getElementById('confirm-password').value;
+        const errEl = document.getElementById('pw-change-error');
+        errEl.hidden = true;
+
+        if (newPw.length < 4) {
+            errEl.textContent = '4자리 이상 입력해주세요';
+            errEl.hidden = false;
+            return;
+        }
+        if (newPw !== confirmPw) {
+            errEl.textContent = '비밀번호가 일치하지 않습니다';
+            errEl.hidden = false;
+            return;
+        }
+
+        try {
+            const res = await api('POST', '/api/auth/change-password', {
+                newPassword: newPw,
+                confirmPassword: confirmPw
+            });
+            if (res.success) {
+                showDashboard();
+            } else {
+                errEl.textContent = res.error;
+                errEl.hidden = false;
+            }
+        } catch (err) {
+            errEl.textContent = '변경 실패: ' + err.message;
+            errEl.hidden = false;
+        }
+    }
+
+    // ── Password Change (from settings) ─────
+    async function changePasswordFromSettings() {
+        const currentPw = document.getElementById('pw-current').value;
+        const newPw = document.getElementById('pw-new').value;
+        const confirmPw = document.getElementById('pw-confirm').value;
+        const resultEl = document.getElementById('pw-settings-result');
+        resultEl.hidden = true;
+
+        if (!currentPw) {
+            resultEl.textContent = '현재 비밀번호를 입력해주세요';
+            resultEl.className = 'action-result fail';
+            resultEl.hidden = false;
+            return;
+        }
+        if (newPw.length < 4) {
+            resultEl.textContent = '새 비밀번호는 4자리 이상이어야 합니다';
+            resultEl.className = 'action-result fail';
+            resultEl.hidden = false;
+            return;
+        }
+        if (newPw !== confirmPw) {
+            resultEl.textContent = '새 비밀번호가 일치하지 않습니다';
+            resultEl.className = 'action-result fail';
+            resultEl.hidden = false;
+            return;
+        }
+
+        try {
+            const res = await api('POST', '/api/auth/change-password', {
+                currentPassword: currentPw,
+                newPassword: newPw,
+                confirmPassword: confirmPw
+            });
+            resultEl.textContent = res.success ? '비밀번호가 변경되었습니다' : res.error;
+            resultEl.className = 'action-result' + (res.success ? '' : ' fail');
+            resultEl.hidden = false;
+            if (res.success) {
+                document.getElementById('pw-current').value = '';
+                document.getElementById('pw-new').value = '';
+                document.getElementById('pw-confirm').value = '';
+            }
+            setTimeout(() => { resultEl.hidden = true; }, 4000);
+        } catch (err) {
+            resultEl.textContent = '변경 실패: ' + err.message;
+            resultEl.className = 'action-result fail';
+            resultEl.hidden = false;
+        }
     }
 
     // ── Status ──────────────────────────────
@@ -130,15 +230,39 @@ const App = (() => {
         try {
             const res = await api('GET', '/api/settings');
             if (!res.success) return;
-            document.getElementById('setting-url').value = res.data.schoolUrl || '';
+            const d = res.data;
+            document.getElementById('setting-url').value = d.schoolUrl || '';
+            document.getElementById('setting-autostart').checked = !!d.autoStart;
+            document.getElementById('setting-powerbtn').checked = !!d.showPowerBtn;
+            document.getElementById('setting-schedule-show').checked = !!d.showSchedule;
+
+            // Cut mode
+            if (d.cutMode === 'partial') {
+                document.getElementById('cut-partial').checked = true;
+            } else {
+                document.getElementById('cut-full').checked = true;
+            }
+
+            // Schedule
+            buildScheduleTable(d.schedule || []);
         } catch (e) {}
     }
 
     async function saveSettings() {
-        const url = document.getElementById('setting-url').value.trim();
         const resultEl = document.getElementById('settings-result');
+        const cutMode = document.querySelector('input[name="cutMode"]:checked').value;
+
+        const payload = {
+            schoolUrl: document.getElementById('setting-url').value.trim(),
+            autoStart: document.getElementById('setting-autostart').checked,
+            showPowerBtn: document.getElementById('setting-powerbtn').checked,
+            showSchedule: document.getElementById('setting-schedule-show').checked,
+            cutMode: cutMode,
+            schedule: getScheduleFromTable()
+        };
+
         try {
-            const res = await api('PUT', '/api/settings', { schoolUrl: url });
+            const res = await api('PUT', '/api/settings', payload);
             resultEl.textContent = res.success ? '설정이 저장되었습니다' : res.error;
             resultEl.className = 'action-result' + (res.success ? '' : ' fail');
             resultEl.hidden = false;
@@ -149,6 +273,43 @@ const App = (() => {
             resultEl.hidden = false;
         }
     }
+
+    // ── Schedule Table ──────────────────────
+    function buildScheduleTable(schedule) {
+        const tbody = document.getElementById('schedule-body');
+        tbody.innerHTML = '';
+        for (let i = 0; i < 7; i++) {
+            const s = schedule[i] || { enabled: false, startHour: 9, startMin: 0, endHour: 18, endMin: 0 };
+            const tr = document.createElement('tr');
+            tr.innerHTML =
+                '<td>' + DAY_NAMES[i] + '</td>' +
+                '<td><label class="toggle"><input type="checkbox" data-sched="' + i + '-on"' + (s.enabled ? ' checked' : '') + '><span class="slider"></span></label></td>' +
+                '<td><input type="time" data-sched="' + i + '-start" value="' + pad(s.startHour) + ':' + pad(s.startMin) + '"></td>' +
+                '<td><input type="time" data-sched="' + i + '-end" value="' + pad(s.endHour) + ':' + pad(s.endMin) + '"></td>';
+            tbody.appendChild(tr);
+        }
+    }
+
+    function getScheduleFromTable() {
+        const schedule = [];
+        for (let i = 0; i < 7; i++) {
+            const onEl = document.querySelector('[data-sched="' + i + '-on"]');
+            const startEl = document.querySelector('[data-sched="' + i + '-start"]');
+            const endEl = document.querySelector('[data-sched="' + i + '-end"]');
+            const startParts = (startEl ? startEl.value : '09:00').split(':');
+            const endParts = (endEl ? endEl.value : '18:00').split(':');
+            schedule.push({
+                enabled: onEl ? onEl.checked : false,
+                startHour: parseInt(startParts[0]) || 9,
+                startMin: parseInt(startParts[1]) || 0,
+                endHour: parseInt(endParts[0]) || 18,
+                endMin: parseInt(endParts[1]) || 0
+            });
+        }
+        return schedule;
+    }
+
+    function pad(n) { return String(n).padStart(2, '0'); }
 
     // ── Printer Actions ─────────────────────
     async function printerAction(path, label) {
@@ -199,5 +360,5 @@ const App = (() => {
 
     document.addEventListener('DOMContentLoaded', init);
 
-    return { testPrint, feed, cut, saveSettings };
+    return { testPrint, feed, cut, saveSettings, changePassword, changePasswordFromSettings };
 })();

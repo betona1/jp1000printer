@@ -1,0 +1,28 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Full cut: paper split completely in the middle -->
+    <!-- Top half of paper -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M6,2h12v8H6z"/>
+    <!-- Bottom half of paper (separated gap) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M6,14h12v8H6z"/>
+    <!-- Cut line: dashed line in the gap -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M3,11.5h3v1H3z"/>
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M8,11.5h3v1H8z"/>
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M13,11.5h3v1H13z"/>
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M18,11.5h3v1H18z"/>
+</vector>

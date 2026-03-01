@@ -1,5 +1,6 @@
 package com.betona.printdriver
 
+import android.content.Intent
 import android.graphics.Typeface
 import android.os.Bundle
 import android.util.Log
@@ -23,11 +24,16 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -141,7 +147,10 @@ class LadderGameActivity : ComponentActivity() {
                     val trimmed = BitmapConverter.trimTrailingWhiteRows(monoData)
                     if (scaled !== bitmap) scaled.recycle()
                     bitmap.recycle()
-                    printer.printBitmapAndCut(trimmed)
+                    printer.printBitmap(trimmed)
+                    // ~2cm bottom margin before cut (160 dots at 203 DPI)
+                    printer.write(EscPosCommands.feedDots(160))
+                    printer.feedAndCut(fullCut = AppPrefs.isFullCut(this@LadderGameActivity))
                     runOnUiThread { Toast.makeText(context, "사다리 인쇄 완료", Toast.LENGTH_SHORT).show() }
                     Log.d(TAG, "Ladder print complete")
                 } catch (e: Exception) {
@@ -176,7 +185,9 @@ class LadderGameActivity : ComponentActivity() {
                         val monoResult = BitmapConverter.toMonochrome(resultBmp)
                         val trimmedResult = BitmapConverter.trimTrailingWhiteRows(monoResult)
                         resultBmp.recycle()
-                        printer.printBitmapAndCut(trimmedResult)
+                        printer.printBitmap(trimmedResult)
+                        printer.write(EscPosCommands.feedDots(160))
+                        printer.feedAndCut(fullCut = AppPrefs.isFullCut(this@LadderGameActivity))
                     }
                     runOnUiThread { Toast.makeText(context, "결과 인쇄 완료", Toast.LENGTH_SHORT).show() }
                     Log.d(TAG, "Results print complete")
@@ -191,6 +202,24 @@ class LadderGameActivity : ComponentActivity() {
             topBar = {
                 CenterAlignedTopAppBar(
                     title = { Text("사다리 게임", fontWeight = FontWeight.Bold) },
+                    navigationIcon = {
+                        IconButton(onClick = {
+                            startActivity(Intent(this@LadderGameActivity, WebPrintActivity::class.java))
+                            finish()
+                        }) {
+                            Icon(Icons.Filled.Home, contentDescription = "홈", tint = Color.White)
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = {
+                            startActivity(Intent(this@LadderGameActivity, MainActivity::class.java).apply {
+                                putExtra(MainActivity.EXTRA_REQUIRE_AUTH, true)
+                            })
+                            finish()
+                        }) {
+                            Icon(Icons.Filled.Settings, contentDescription = "관리자", tint = Color.White)
+                        }
+                    },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = MaterialTheme.colorScheme.primary,
                         titleContentColor = MaterialTheme.colorScheme.onPrimary

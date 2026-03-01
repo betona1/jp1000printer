@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.provider.Settings
 import android.util.Log
+import com.betona.printdriver.AppPrefs
 import com.betona.printdriver.BitmapConverter
 import com.betona.printdriver.DevicePrinter
 import java.io.*
@@ -266,7 +267,7 @@ class IppServer(private val port: Int = 6631) {
         try {
             tempFile = File.createTempFile("ipp_job_", ".pdf", context.cacheDir)
             FileOutputStream(tempFile).use { it.write(docData) }
-            renderAndPrint(tempFile)
+            renderAndPrint(tempFile, context)
             Log.i(TAG, "Print-Job #$currentJobId completed")
         } catch (e: Exception) {
             Log.e(TAG, "Print-Job #$currentJobId failed", e)
@@ -299,7 +300,7 @@ class IppServer(private val port: Int = 6631) {
 
     // ── PDF Rendering & Printing ─────────────────────────────────────────
 
-    private fun renderAndPrint(pdfFile: File) {
+    private fun renderAndPrint(pdfFile: File, context: Context) {
         val fd = ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY)
         val renderer = PdfRenderer(fd)
         try {
@@ -335,7 +336,7 @@ class IppServer(private val port: Int = 6631) {
                 scaled.recycle()
 
                 if (i == pageCount - 1) {
-                    DevicePrinter.printBitmapAndCut(trimmed)
+                    DevicePrinter.printBitmapAndCut(trimmed, fullCut = AppPrefs.isFullCut(context))
                 } else {
                     DevicePrinter.printBitmap(trimmed)
                 }

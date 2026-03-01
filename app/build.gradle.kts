@@ -81,6 +81,7 @@ dependencies {
     implementation(libs.compose.material3)
     implementation(libs.compose.foundation)
     implementation(libs.activity.compose)
+    implementation("androidx.compose.material:material-icons-extended")
 
     // NanoHTTPD — embedded web server for management interface
     implementation("org.nanohttpd:nanohttpd:2.3.1")

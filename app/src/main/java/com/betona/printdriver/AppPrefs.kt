@@ -19,7 +19,20 @@ object AppPrefs {
     private const val KEY_AUTO_START = "auto_start"
     private const val KEY_SHOW_POWER_BTN = "show_power_btn"
     private const val KEY_SHOW_SCHEDULE = "show_schedule"
+    private const val KEY_ADMIN_PASSWORD = "admin_password"
+    private const val KEY_CUT_MODE = "cut_mode"
+    private const val KEY_MOBILE_MODE = "mobile_mode"
+    private const val KEY_SHOW_CLOCK = "show_clock"
+    private const val KEY_LANDSCAPE = "landscape_mode"
+    private const val KEY_SHOW_ROTATE = "show_rotate_btn"
+    private const val KEY_SHOW_GAMES = "show_games"
+    private const val KEY_NIGHT_SAVE = "night_save_mode"
+    private const val KEY_NIGHT_SAVE_START_H = "night_save_start_h"
+    private const val KEY_NIGHT_SAVE_START_M = "night_save_start_m"
+    private const val KEY_NIGHT_SAVE_END_H = "night_save_end_h"
+    private const val KEY_NIGHT_SAVE_END_M = "night_save_end_m"
     private const val DEFAULT_SCHOOL_URL = "https://read365.edunet.net/SchoolSearch"
+    private const val DEFAULT_PASSWORD = "1234"
 
     private const val BOOT_SCRIPT = "/system/bin/libro_autostart.sh"
     private const val BOOT_RC = "/system/etc/init/libro_autostart.rc"
@@ -137,6 +150,139 @@ object AppPrefs {
         val sched = getDaySchedule(context, dayIndex)
         if (!sched.enabled) return null
         return String.format("%02d:%02d~%02d:%02d", sched.startHour, sched.startMin, sched.endHour, sched.endMin)
+    }
+
+    // ── Admin Password ──────────────────────────────────────────────────
+
+    fun getAdminPassword(context: Context): String {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_ADMIN_PASSWORD, DEFAULT_PASSWORD) ?: DEFAULT_PASSWORD
+    }
+
+    fun setAdminPassword(context: Context, password: String) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString(KEY_ADMIN_PASSWORD, password).apply()
+    }
+
+    fun isDefaultPassword(context: Context): Boolean {
+        return getAdminPassword(context) == DEFAULT_PASSWORD
+    }
+
+    // ── Cut Mode ─────────────────────────────────────────────────────
+
+    fun getCutMode(context: Context): String {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_CUT_MODE, "full") ?: "full"
+    }
+
+    fun setCutMode(context: Context, mode: String) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString(KEY_CUT_MODE, mode).apply()
+    }
+
+    fun isFullCut(context: Context): Boolean = getCutMode(context) == "full"
+
+    // ── Mobile Mode ──────────────────────────────────────────────────
+
+    fun isMobileMode(context: Context): Boolean {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_MOBILE_MODE, true)
+    }
+
+    fun setMobileMode(context: Context, mobile: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_MOBILE_MODE, mobile).apply()
+    }
+
+    // ── Show Clock ───────────────────────────────────────────────────
+
+    fun getShowClock(context: Context): Boolean {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_SHOW_CLOCK, true)
+    }
+
+    fun setShowClock(context: Context, show: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_SHOW_CLOCK, show).apply()
+    }
+
+    // ── Landscape Mode ───────────────────────────────────────────────
+
+    fun isLandscape(context: Context): Boolean {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_LANDSCAPE, false)
+    }
+
+    fun setLandscape(context: Context, landscape: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_LANDSCAPE, landscape).apply()
+    }
+
+    // ── Show Rotate Button ───────────────────────────────────────────
+
+    fun getShowRotateButton(context: Context): Boolean {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_SHOW_ROTATE, false)
+    }
+
+    fun setShowRotateButton(context: Context, show: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_SHOW_ROTATE, show).apply()
+    }
+
+    // ── Game Visibility ─────────────────────────────────────────────
+
+    fun getShowGames(context: Context): Boolean {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_SHOW_GAMES, false)
+    }
+
+    fun setShowGames(context: Context, show: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_SHOW_GAMES, show).apply()
+    }
+
+    // ── Night Save Mode ───────────────────────────────────────────────
+
+    fun isNightSaveMode(context: Context): Boolean {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_NIGHT_SAVE, true)
+    }
+
+    fun setNightSaveMode(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_NIGHT_SAVE, enabled).apply()
+    }
+
+    fun getNightSaveDaytimeStart(context: Context): Pair<Int, Int> {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return Pair(prefs.getInt(KEY_NIGHT_SAVE_START_H, 9), prefs.getInt(KEY_NIGHT_SAVE_START_M, 0))
+    }
+
+    fun getNightSaveDaytimeEnd(context: Context): Pair<Int, Int> {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return Pair(prefs.getInt(KEY_NIGHT_SAVE_END_H, 18), prefs.getInt(KEY_NIGHT_SAVE_END_M, 0))
+    }
+
+    fun setNightSaveDaytimeStart(context: Context, hour: Int, min: Int) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putInt(KEY_NIGHT_SAVE_START_H, hour).putInt(KEY_NIGHT_SAVE_START_M, min).apply()
+    }
+
+    fun setNightSaveDaytimeEnd(context: Context, hour: Int, min: Int) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putInt(KEY_NIGHT_SAVE_END_H, hour).putInt(KEY_NIGHT_SAVE_END_M, min).apply()
+    }
+
+    /** Check if current time is within daytime active hours */
+    fun isDaytime(context: Context): Boolean {
+        val now = java.util.Calendar.getInstance()
+        val nowMin = now.get(java.util.Calendar.HOUR_OF_DAY) * 60 + now.get(java.util.Calendar.MINUTE)
+        val (sh, sm) = getNightSaveDaytimeStart(context)
+        val (eh, em) = getNightSaveDaytimeEnd(context)
+        val startMin = sh * 60 + sm
+        val endMin = eh * 60 + em
+        return nowMin in startMin until endMin
     }
 
     // ── Schedule ──────────────────────────────────────────────────────

@@ -169,14 +169,76 @@ app/src/main/java/com/betona/printdriver/
 ├── DevicePrinter.kt         # 프린터 I/O 싱글톤 (jyndklib 래핑)
 ├── EscPosCommands.kt        # ESC/POS 명령어 빌더
 ├── BitmapConverter.kt       # Bitmap→흑백 변환, 크롭, 트림
-├── MainActivity.kt          # 설정 UI + 테스트 버튼
+├── AppPrefs.kt              # SharedPreferences 설정 관리
+├── MainActivity.kt          # 관리자 설정 UI + 테스트 버튼
+├── WebPrintActivity.kt      # 홈 화면 (WebView + 툴바)
 ├── LadderGameActivity.kt    # 사다리 게임 (Jetpack Compose)
 ├── LadderGenerator.kt       # 사다리 생성 알고리즘
-└── LadderView.kt            # 사다리 Canvas 렌더링 + 인쇄용 Bitmap
+├── LadderView.kt            # 사다리 Canvas 렌더링 + 인쇄용 Bitmap
+├── BingoGameActivity.kt     # 빙고 게임 (Jetpack Compose)
+├── BingoGenerator.kt        # 빙고 카드 생성 + 번호 추첨 + 빙고 판정
+├── BingoCardView.kt         # 빙고 카드 Canvas 렌더링 + 인쇄용 Bitmap
+└── web/
+    ├── WebServerService.kt      # Foreground Service (웹/RAW/IPP 서버 호스팅)
+    ├── WebManagementServer.kt   # NanoHTTPD 웹 관리 서버 (:8080)
+    ├── RawPrintServer.kt        # RAW 인쇄 서버 (:9100)
+    ├── IppServer.kt             # IPP 인쇄 서버 (:6631)
+    ├── PrinterApi.kt            # REST API - 인쇄 관련
+    ├── DeviceApi.kt             # REST API - 기기 정보/설정
+    └── AuthManager.kt           # 웹 인증 관리
 
 jyndklib/                    # 네이티브 라이브러리 (JY-P1000 전용)
 └── jyNativeClass            # JNI: open, close, printString, rawData, feed 등
+
+printplugin/                 # 스마트폰용 72mm 네트워크 인쇄 플러그인
+├── LibroNetPrintService.kt  # Android PrintService (IPP 클라이언트)
+├── LibroNetDiscoverySession.kt  # mDNS 프린터 자동 검색
+└── IppClient.kt             # IPP Print-Job 전송
 ```
+
+## 네트워크 인쇄 서버
+
+키오스크에 내장된 3개의 인쇄 서버를 통해 PC 및 스마트폰에서 원격 인쇄가 가능합니다.
+
+| 서버 | 포트 | 프로토콜 | 용도 |
+|------|------|----------|------|
+| 웹 관리 | 8080 | HTTP | 브라우저에서 인쇄 + 기기 관리 |
+| RAW 인쇄 | 9100 | TCP RAW | Windows PC 네트워크 프린터 |
+| IPP 인쇄 | 6631 | IPP/HTTP | 스마트폰 인쇄 플러그인 |
+
+### PC에서 인쇄 (RAW :9100)
+1. 제어판 → 장치 및 프린터 → 프린터 추가
+2. "TCP/IP 주소로 프린터 추가" 선택
+3. IP: `<기기IP>` / 포트: `9100` 입력
+
+### 스마트폰에서 인쇄 (IPP :6631)
+1. `printplugin` APK 설치 (72mm 용지 플러그인)
+2. 같은 WiFi 네트워크 연결
+3. 인쇄 시 자동으로 프린터 검색됨
+
+### 브라우저에서 인쇄 (웹 :8080)
+- `http://<기기IP>:8080` 접속
+- 파일 업로드, 텍스트/이미지 인쇄, 기기 설정 가능
+
+## 게임 기능
+
+관리자 설정에서 "홈 화면 게임 표시" 옵션 활성화 시 홈 툴바에 게임 버튼이 표시됩니다.
+
+### 사다리 게임
+- 2~10명, 결과 직접 입력
+- 사다리 생성 → 화면 표시 → 인쇄
+- 참가자가 선택 후 결과 공개 (애니메이션)
+
+### 빙고 게임
+- 3x3 / 4x4 / 5x5 그리드 선택
+- 1~30명 참가, 커스텀 숫자 범위 지원
+- 3단계 진행: 설정 → 카드 확인/인쇄 → 번호 추첨
+- 자동 추첨 + 수동 번호 선택 지원
+- 빙고 라인 완성 시 색상별 줄긋기 표시
+- 카드별 빙고 달성 현황 실시간 표시
+- 당첨 시 자동 알림 + 당첨 카드 인쇄
+
+> 게임에서 관리자 페이지 진입 시 항상 비밀번호 입력이 필요합니다.
 
 ## 용지 설정
 

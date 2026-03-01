@@ -141,7 +141,7 @@ class LibroPrintService : PrintService() {
 
             val isLastPage = (i == pageCount - 1)
             if (isLastPage) {
-                activePrinter.printBitmapAndCut(monoData)
+                activePrinter.printBitmapAndCut(monoData, fullCut = AppPrefs.isFullCut(this))
             } else {
                 activePrinter.printBitmap(monoData)
             }

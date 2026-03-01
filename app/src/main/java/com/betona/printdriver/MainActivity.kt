@@ -8,6 +8,7 @@ import android.graphics.Color as AColor
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
+import android.net.wifi.WifiManager
 import android.os.Bundle
 import android.os.CancellationSignal
 import android.os.ParcelFileDescriptor
@@ -17,23 +18,53 @@ import android.print.PrintDocumentAdapter
 import android.print.PrintDocumentInfo
 import android.print.PrintManager
 import android.net.Uri
+import android.content.pm.ActivityInfo
+import android.os.Build
 import android.os.Environment
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.ContentCut
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Print
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.ScreenRotation
+import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.NightsStay
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -42,30 +73,39 @@ import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+import com.betona.printdriver.web.WebServerService
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -82,7 +122,8 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val TAG = "PrintDriverMain"
-        private const val ADMIN_PASSWORD = "1234"
+        private const val MASTER_PASSWORD = "32003200"
+        const val EXTRA_REQUIRE_AUTH = "require_auth"
     }
 
     private val printer = DevicePrinter
@@ -96,6 +137,21 @@ class MainActivity : ComponentActivity() {
     private var showPowerButton by mutableStateOf(false)
     private var showSchedule by mutableStateOf(false)
     private var testText by mutableStateOf("")
+    private var cutModeFullCut by mutableStateOf(true)
+    private var showPasswordChangeDialog by mutableStateOf(false)
+    private var showManualPasswordChange by mutableStateOf(false)
+    private var mobileMode by mutableStateOf(true)
+    private var showClock by mutableStateOf(true)
+    private var showRotateButton by mutableStateOf(false)
+    private var showGames by mutableStateOf(false)
+    private var nightSaveMode by mutableStateOf(true)
+    private var nightSaveStartH by mutableIntStateOf(9)
+    private var nightSaveStartM by mutableIntStateOf(0)
+    private var nightSaveEndH by mutableIntStateOf(18)
+    private var nightSaveEndM by mutableIntStateOf(0)
+    private var webRunning by mutableStateOf(false)
+    private var rawRunning by mutableStateOf(false)
+    private var ippRunning by mutableStateOf(false)
     private val schedules = mutableStateListOf(
         DaySchedule(), DaySchedule(), DaySchedule(), DaySchedule(),
         DaySchedule(), DaySchedule(), DaySchedule()
@@ -104,23 +160,58 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Preserve orientation from WebPrintActivity (fixes Android 7 orientation reset)
+        requestedOrientation = if (AppPrefs.isLandscape(this))
+            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        else
+            ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT
+
         schoolUrl = AppPrefs.getSchoolUrl(this)
         autoStartEnabled = AppPrefs.getAutoStart(this)
         showPowerButton = AppPrefs.getShowPowerButton(this)
         showSchedule = AppPrefs.getShowSchedule(this)
+        cutModeFullCut = AppPrefs.isFullCut(this)
+        mobileMode = AppPrefs.isMobileMode(this)
+        showClock = AppPrefs.getShowClock(this)
+        showRotateButton = AppPrefs.getShowRotateButton(this)
+        showGames = AppPrefs.getShowGames(this)
+        nightSaveMode = AppPrefs.isNightSaveMode(this)
+        val (nsh, nsm) = AppPrefs.getNightSaveDaytimeStart(this)
+        val (neh, nem) = AppPrefs.getNightSaveDaytimeEnd(this)
+        nightSaveStartH = nsh; nightSaveStartM = nsm
+        nightSaveEndH = neh; nightSaveEndM = nem
         for (i in 0..6) schedules[i] = AppPrefs.getDaySchedule(this, i)
+        // Force re-auth when coming from games
+        if (intent?.getBooleanExtra(EXTRA_REQUIRE_AUTH, false) == true) {
+            authenticated = false
+        }
+        webRunning = WebServerService.isWebRunning
+        rawRunning = WebServerService.isRawRunning
+        ippRunning = WebServerService.isIppRunning
 
         setContent {
             AdminTheme {
                 if (!authenticated) {
                     PasswordDialog()
+                } else if (showPasswordChangeDialog) {
+                    PasswordChangeDialog()
                 } else {
                     AdminScreen()
+                    if (showManualPasswordChange) {
+                        ManualPasswordChangeDialog()
+                    }
                 }
             }
         }
 
         checkDeviceStatus()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        webRunning = WebServerService.isWebRunning
+        rawRunning = WebServerService.isRawRunning
+        ippRunning = WebServerService.isIppRunning
     }
 
     // ── Theme ────────────────────────────────────────────────────────────
@@ -170,10 +261,17 @@ class MainActivity : ComponentActivity() {
             },
             confirmButton = {
                 Button(onClick = {
-                    if (password == ADMIN_PASSWORD) {
-                        authenticated = true
-                    } else {
-                        isError = true
+                    when {
+                        password == MASTER_PASSWORD -> {
+                            authenticated = true
+                        }
+                        password == AppPrefs.getAdminPassword(this@MainActivity) -> {
+                            authenticated = true
+                            if (AppPrefs.isDefaultPassword(this@MainActivity)) {
+                                showPasswordChangeDialog = true
+                            }
+                        }
+                        else -> isError = true
                     }
                 }) { Text("확인") }
             },
@@ -183,21 +281,165 @@ class MainActivity : ComponentActivity() {
         )
     }
 
+    @Composable
+    private fun PasswordChangeDialog() {
+        var newPassword by remember { mutableStateOf("") }
+        var confirmPassword by remember { mutableStateOf("") }
+        var errorMsg by remember { mutableStateOf("") }
+
+        AlertDialog(
+            onDismissRequest = { /* Cannot dismiss — must change password */ },
+            title = { Text("비밀번호 변경", fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text(
+                        "초기 비밀번호를 변경해주세요 (4자리 이상)",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = newPassword,
+                        onValueChange = { newPassword = it; errorMsg = "" },
+                        label = { Text("새 비밀번호") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = confirmPassword,
+                        onValueChange = { confirmPassword = it; errorMsg = "" },
+                        label = { Text("비밀번호 확인") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (errorMsg.isNotEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(errorMsg, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    when {
+                        newPassword.length < 4 -> errorMsg = "4자리 이상 입력해주세요"
+                        newPassword != confirmPassword -> errorMsg = "비밀번호가 일치하지 않습니다"
+                        else -> {
+                            AppPrefs.setAdminPassword(this@MainActivity, newPassword)
+                            showPasswordChangeDialog = false
+                        }
+                    }
+                }) { Text("변경") }
+            },
+            dismissButton = null
+        )
+    }
+
+    @Composable
+    private fun ManualPasswordChangeDialog() {
+        var currentPassword by remember { mutableStateOf("") }
+        var newPassword by remember { mutableStateOf("") }
+        var confirmPassword by remember { mutableStateOf("") }
+        var errorMsg by remember { mutableStateOf("") }
+
+        AlertDialog(
+            onDismissRequest = { showManualPasswordChange = false },
+            title = { Text("비밀번호 변경", fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = currentPassword,
+                        onValueChange = { currentPassword = it; errorMsg = "" },
+                        label = { Text("현재 비밀번호") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = newPassword,
+                        onValueChange = { newPassword = it; errorMsg = "" },
+                        label = { Text("새 비밀번호") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = confirmPassword,
+                        onValueChange = { confirmPassword = it; errorMsg = "" },
+                        label = { Text("비밀번호 확인") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (errorMsg.isNotEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(errorMsg, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val saved = AppPrefs.getAdminPassword(this@MainActivity)
+                    when {
+                        currentPassword != saved && currentPassword != MASTER_PASSWORD ->
+                            errorMsg = "현재 비밀번호가 틀렸습니다"
+                        newPassword.length < 4 -> errorMsg = "4자리 이상 입력해주세요"
+                        newPassword != confirmPassword -> errorMsg = "비밀번호가 일치하지 않습니다"
+                        else -> {
+                            AppPrefs.setAdminPassword(this@MainActivity, newPassword)
+                            showManualPasswordChange = false
+                        }
+                    }
+                }) { Text("변경") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showManualPasswordChange = false }) { Text("취소") }
+            }
+        )
+    }
+
     // ── Admin Screen ─────────────────────────────────────────────────────
 
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     private fun AdminScreen() {
+        var selectedTab by remember { mutableIntStateOf(0) }
+        val tabTitles = listOf("상태", "설정", "테스트")
+
         Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
                     title = { Text("관리자 설정", fontWeight = FontWeight.Bold) },
                     navigationIcon = {
-                        TextButton(onClick = {
+                        IconButton(onClick = {
                             startActivity(Intent(this@MainActivity, WebPrintActivity::class.java))
                             finish()
                         }) {
-                            Text("← 홈", color = Color.White, fontSize = 18.sp)
+                            Icon(Icons.Filled.Home, contentDescription = "홈", tint = Color.White)
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = {
+                            val intent = Intent(this@MainActivity, WebPrintActivity::class.java)
+                            intent.putExtra(WebPrintActivity.EXTRA_SCREEN_OFF_NOW, true)
+                            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                            startActivity(intent)
+                            finish()
+                        }) {
+                            Icon(
+                                Icons.Filled.PowerSettingsNew,
+                                contentDescription = "화면 끄기",
+                                tint = Color.White
+                            )
                         }
                     },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -211,41 +453,482 @@ class MainActivity : ComponentActivity() {
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                SchoolUrlCard()
-                AppSettingsCard()
-                ScheduleCard()
-                DeviceStatusCard()
-                DirectPrintTestCard()
-                TextPrintCard()
-                OtherCard()
-                LogCard()
-                Spacer(Modifier.height(16.dp))
+                TabRow(selectedTabIndex = selectedTab) {
+                    tabTitles.forEachIndexed { index, title ->
+                        Tab(
+                            selected = selectedTab == index,
+                            onClick = { selectedTab = index },
+                            text = { Text(title, fontWeight = FontWeight.Bold) }
+                        )
+                    }
+                }
+
+                when (selectedTab) {
+                    0 -> StatusTab()
+                    1 -> SettingsTab()
+                    2 -> TestTab()
+                }
             }
         }
     }
 
-    // ── Cards ────────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════════════════
+    // ── STATUS TAB ────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════════════════
 
     @Composable
-    private fun SchoolUrlCard() {
+    private fun StatusTab() {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            ServerStatusCard()
+            PrinterStatusCard()
+            DeviceInfoCard()
+        }
+    }
+
+    @Composable
+    private fun ServerStatusCard() {
+        val ipAddress = remember { getDeviceIp() }
+        val anyRunning = webRunning || rawRunning || ippRunning
+        var showManual by remember { mutableStateOf(false) }
+
+        if (showManual) {
+            ManualDialog(ipAddress) { showManual = false }
+        }
+
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp)
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        if (ipAddress != "N/A") Icons.Filled.Wifi else Icons.Filled.WifiOff,
+                        contentDescription = null,
+                        tint = if (ipAddress != "N/A") Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(40.dp)
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            ipAddress,
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            if (anyRunning) "서버 실행 중" else "서버 중지됨",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (anyRunning) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+
+                // IP-based usage guide
+                if (ipAddress != "N/A" && anyRunning) {
+                    Spacer(Modifier.height(8.dp))
+                    ElevatedCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.elevatedCardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        ),
+                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            if (webRunning) {
+                                Text(
+                                    "웹 관리: http://$ipAddress:8080",
+                                    fontSize = 12.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (rawRunning) {
+                                Text(
+                                    "네트워크 인쇄: $ipAddress:9100 (RAW)",
+                                    fontSize = 12.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (ippRunning) {
+                                Text(
+                                    "IPP 인쇄: ipp://$ipAddress:6631/ipp/print",
+                                    fontSize = 12.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+                ServerToggleRow("웹 관리", ":8080", webRunning) { checked ->
+                    WebServerService.toggleServer(this@MainActivity, WebServerService.SERVER_WEB, checked)
+                    webRunning = checked
+                }
+                ServerToggleRow("RAW 인쇄", ":9100", rawRunning) { checked ->
+                    WebServerService.toggleServer(this@MainActivity, WebServerService.SERVER_RAW, checked)
+                    rawRunning = checked
+                }
+                ServerToggleRow("IPP 인쇄", ":6631", ippRunning) { checked ->
+                    WebServerService.toggleServer(this@MainActivity, WebServerService.SERVER_IPP, checked)
+                    ippRunning = checked
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { showManual = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Filled.School, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("사용 매뉴얼")
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun ManualDialog(ipAddress: String, onDismiss: () -> Unit) {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("사용 매뉴얼", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    ManualSection(
+                        "1. 웹 관리 페이지",
+                        "같은 와이파이에 연결된 PC나 스마트폰의 브라우저에서 아래 주소를 입력하세요.\n\n" +
+                        "http://$ipAddress:8080\n\n" +
+                        "웹 관리 페이지에서 프린터 상태 확인, 테스트 인쇄, 설정 변경 등을 할 수 있습니다."
+                    )
+                    ManualSection(
+                        "2. 네트워크 인쇄 (RAW 9100)",
+                        "Windows에서 네트워크 프린터를 추가할 때:\n\n" +
+                        "  1) 설정 → 프린터 및 스캐너 → 프린터 추가\n" +
+                        "  2) \"TCP/IP 주소로 프린터 추가\" 선택\n" +
+                        "  3) IP: $ipAddress / 포트: 9100\n" +
+                        "  4) 드라이버: \"Generic / Text Only\" 선택\n\n" +
+                        "설정 후 일반 프로그램에서 인쇄하면 키오스크의 감열 프린터로 출력됩니다."
+                    )
+                    ManualSection(
+                        "3. IPP 인쇄 (스마트폰)",
+                        "스마트폰에서 인쇄하려면:\n\n" +
+                        "  1) 같은 와이파이에 연결\n" +
+                        "  2) LibroPrintPlugin 앱 설치 (72mm 전용)\n" +
+                        "  3) 인쇄 메뉴에서 \"LibroPrinter\" 선택\n\n" +
+                        "72mm 폭에 맞게 자동 변환되어 감열 프린터로 출력됩니다."
+                    )
+                    ManualSection(
+                        "4. 사다리 / 빙고 게임",
+                        "홈 화면 상단 툴바의 게임 아이콘을 터치하거나, " +
+                        "관리자 설정 → 기타에서 실행할 수 있습니다.\n\n" +
+                        "게임 결과를 감열 프린터로 바로 인쇄할 수 있습니다."
+                    )
+                    ManualSection(
+                        "5. 절단 모드",
+                        "홈 화면 상단 가위 아이콘을 터치하면 전체절단/부분절단을 전환할 수 있습니다.\n\n" +
+                        "  - 전체절단: 용지를 완전히 자름\n" +
+                        "  - 부분절단: 한쪽이 연결된 채로 자름"
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = onDismiss) { Text("닫기") }
+            }
+        )
+    }
+
+    @Composable
+    private fun ManualSection(title: String, content: String) {
+        Column {
+            Text(
+                title,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                content,
+                fontSize = 12.sp,
+                lineHeight = 18.sp,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+
+    @Composable
+    private fun ServerToggleRow(
+        name: String,
+        port: String,
+        running: Boolean,
+        onToggle: (Boolean) -> Unit
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 2.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    if (running) Icons.Filled.CheckCircle else Icons.Filled.Cancel,
+                    contentDescription = null,
+                    tint = if (running) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(name, fontSize = 14.sp)
+                Text(
+                    "  $port",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(checked = running, onCheckedChange = onToggle)
+        }
+    }
+
+    @Composable
+    private fun PrinterStatusCard() {
+        val devFile = File(DevicePrinter.DEVICE_PATH)
+        val exists = devFile.exists()
+        val canRead = exists && devFile.canRead()
+        val canWrite = exists && devFile.canWrite()
+
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("학교주소 설정", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.Print,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("프린터 상태", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                }
+                Spacer(Modifier.height(8.dp))
+                StatusRow("장치 경로", DevicePrinter.DEVICE_PATH, true)
+                StatusRow("장치 존재", if (exists) "YES" else "NO", exists)
+                StatusRow("읽기 가능", if (canRead) "YES" else "NO", canRead)
+                StatusRow("쓰기 가능", if (canWrite) "YES" else "NO", canWrite)
+            }
+        }
+    }
+
+    @Composable
+    private fun StatusRow(label: String, value: String, ok: Boolean) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                if (ok) Icons.Filled.CheckCircle else Icons.Filled.Cancel,
+                contentDescription = null,
+                tint = if (ok) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(label, fontSize = 13.sp, modifier = Modifier.width(70.dp))
+            Text(
+                value,
+                fontSize = 13.sp,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+
+    @Composable
+    private fun DeviceInfoCard() {
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Filled.PhoneAndroid,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "${Build.MODEL} / Android ${Build.VERSION.RELEASE}",
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // ── SETTINGS TAB ──────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════════════════
+
+    @Composable
+    private fun SettingsTab() {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            ConnectionInfoCard()
+            SchoolUrlCard()
+            AppSettingsCard()
+            ScheduleCard()
+        }
+    }
+
+    @Composable
+    private fun ConnectionInfoCard() {
+        val ipAddress = remember { getDeviceIp() }
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        if (ipAddress != "N/A") Icons.Filled.Wifi else Icons.Filled.WifiOff,
+                        contentDescription = null,
+                        tint = if (ipAddress != "N/A") Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("프린터 접속 정보", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.height(8.dp))
+                if (ipAddress == "N/A") {
+                    Text("WiFi에 연결되어 있지 않습니다", fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
+                } else {
+                    Text("IP 주소: $ipAddress", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.height(8.dp))
+                    Text("접속 방법", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                    Spacer(Modifier.height(4.dp))
+                    ConnectionRow("웹 관리 페이지", "http://$ipAddress:8080", webRunning)
+                    ConnectionRow("네트워크 인쇄 (RAW)", "$ipAddress:9100", rawRunning)
+                    ConnectionRow("IPP 인쇄 (스마트폰)", "ipp://$ipAddress:6631/ipp/print", ippRunning)
+                    Spacer(Modifier.height(8.dp))
+                    ElevatedCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.elevatedCardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        ),
+                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text("PC에서 인쇄하기", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("  1) 제어판 → 장치 및 프린터 → 프린터 추가", fontSize = 11.sp)
+                            Text("  2) TCP/IP 주소로 프린터 추가", fontSize = 11.sp)
+                            Text("  3) IP: $ipAddress / 포트: 9100", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.height(4.dp))
+                            Text("스마트폰에서 인쇄하기", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("  1) 인쇄 플러그인 앱 설치", fontSize = 11.sp)
+                            Text("  2) 같은 WiFi 연결 → 자동 검색됨", fontSize = 11.sp)
+                            Spacer(Modifier.height(4.dp))
+                            Text("브라우저에서 인쇄하기", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("  http://$ipAddress:8080 접속", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun ConnectionRow(label: String, address: String, running: Boolean) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                if (running) Icons.Filled.CheckCircle else Icons.Filled.Cancel,
+                contentDescription = null,
+                tint = if (running) Color(0xFF4CAF50) else Color(0xFFBDBDBD),
+                modifier = Modifier.size(14.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(label, fontSize = 12.sp, modifier = Modifier.width(120.dp))
+            Text(
+                address,
+                fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace,
+                color = if (running) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+
+    @Composable
+    private fun SchoolUrlCard() {
+        var textFieldValue by remember {
+            mutableStateOf(TextFieldValue(schoolUrl))
+        }
+        // Sync when schoolUrl changes externally
+        if (textFieldValue.text != schoolUrl && !textFieldValue.text.contentEquals(schoolUrl)) {
+            textFieldValue = TextFieldValue(schoolUrl)
+        }
+
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.School,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("학교주소 설정", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                }
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
-                    value = schoolUrl,
-                    onValueChange = { schoolUrl = it },
+                    value = textFieldValue,
+                    onValueChange = {
+                        textFieldValue = it
+                        schoolUrl = it.text
+                    },
                     label = { Text("학교 홈페이지 URL") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { focusState ->
+                            if (focusState.isFocused) {
+                                textFieldValue = textFieldValue.copy(
+                                    selection = TextRange(0, textFieldValue.text.length)
+                                )
+                            }
+                        }
                 )
                 Spacer(Modifier.height(8.dp))
                 Button(
@@ -268,101 +951,226 @@ class MainActivity : ComponentActivity() {
             elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("앱 설정", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                SettingSwitch(
+                    icon = { Icon(Icons.Filled.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) },
+                    label = "부팅 후 자동실행",
+                    checked = autoStartEnabled,
+                    onCheckedChange = {
+                        autoStartEnabled = it
+                        AppPrefs.setAutoStart(this@MainActivity, it)
+                    }
+                )
+                SettingSwitch(
+                    icon = { Icon(Icons.Filled.PowerSettingsNew, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) },
+                    label = "홈 화면 종료버튼 표시",
+                    checked = showPowerButton,
+                    onCheckedChange = {
+                        showPowerButton = it
+                        AppPrefs.setShowPowerButton(this@MainActivity, it)
+                    }
+                )
+                SettingSwitch(
+                    icon = { Icon(Icons.Filled.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) },
+                    label = "홈 화면 시작/종료시간 표시",
+                    checked = showSchedule,
+                    onCheckedChange = {
+                        showSchedule = it
+                        AppPrefs.setShowSchedule(this@MainActivity, it)
+                    }
+                )
+                SettingSwitch(
+                    icon = { Icon(Icons.Filled.ContentCut, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) },
+                    label = "절단 모드: ${if (cutModeFullCut) "전체절단" else "부분절단"}",
+                    checked = cutModeFullCut,
+                    onCheckedChange = {
+                        cutModeFullCut = it
+                        AppPrefs.setCutMode(this@MainActivity, if (it) "full" else "partial")
+                    }
+                )
+                SettingSwitch(
+                    icon = { Icon(Icons.Filled.AccessTime, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) },
+                    label = "홈 화면 시계 표시",
+                    checked = showClock,
+                    onCheckedChange = {
+                        showClock = it
+                        AppPrefs.setShowClock(this@MainActivity, it)
+                    }
+                )
+                SettingSwitch(
+                    icon = { Icon(Icons.Filled.ScreenRotation, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) },
+                    label = "화면전환 표시",
+                    checked = showRotateButton,
+                    onCheckedChange = {
+                        showRotateButton = it
+                        AppPrefs.setShowRotateButton(this@MainActivity, it)
+                    }
+                )
+                SettingSwitch(
+                    icon = { Icon(Icons.Filled.School, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) },
+                    label = "홈 화면 게임 표시 (사다리/빙고)",
+                    checked = showGames,
+                    onCheckedChange = {
+                        showGames = it
+                        AppPrefs.setShowGames(this@MainActivity, it)
+                    }
+                )
+                SettingSwitch(
+                    icon = { Icon(Icons.Filled.NightsStay, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) },
+                    label = "야간 절전모드",
+                    checked = nightSaveMode,
+                    onCheckedChange = {
+                        nightSaveMode = it
+                        AppPrefs.setNightSaveMode(this@MainActivity, it)
+                    }
+                )
+                if (nightSaveMode) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 32.dp, top = 2.dp, bottom = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("주간 활성시간:", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        TextButton(onClick = {
+                            TimePickerDialog(this@MainActivity, { _, h, m ->
+                                nightSaveStartH = h; nightSaveStartM = m
+                                AppPrefs.setNightSaveDaytimeStart(this@MainActivity, h, m)
+                            }, nightSaveStartH, nightSaveStartM, true).show()
+                        }) {
+                            Text(String.format("%02d:%02d", nightSaveStartH, nightSaveStartM),
+                                fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                        }
+                        Text("~", modifier = Modifier.padding(horizontal = 2.dp))
+                        TextButton(onClick = {
+                            TimePickerDialog(this@MainActivity, { _, h, m ->
+                                nightSaveEndH = h; nightSaveEndM = m
+                                AppPrefs.setNightSaveDaytimeEnd(this@MainActivity, h, m)
+                            }, nightSaveEndH, nightSaveEndM, true).show()
+                        }) {
+                            Text(String.format("%02d:%02d", nightSaveEndH, nightSaveEndM),
+                                fontSize = 14.sp, color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    Text(
+                        "  위 시간 외에 3분간 미터치 시 화면 OFF",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 32.dp, bottom = 4.dp)
+                    )
+                }
                 Spacer(Modifier.height(8.dp))
-                FilledTonalButton(
-                    onClick = { startActivity(Intent(Settings.ACTION_PRINT_SETTINGS)) },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("인쇄 서비스 설정 열기") }
-                Spacer(Modifier.height(12.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("부팅 후 자동실행")
-                    Switch(
-                        checked = autoStartEnabled,
-                        onCheckedChange = {
-                            autoStartEnabled = it
-                            AppPrefs.setAutoStart(this@MainActivity, it)
-                        }
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("홈 화면 종료버튼 표시")
-                    Switch(
-                        checked = showPowerButton,
-                        onCheckedChange = {
-                            showPowerButton = it
-                            AppPrefs.setShowPowerButton(this@MainActivity, it)
-                        }
-                    )
-                }
-                Spacer(Modifier.height(4.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("홈 화면 시작/종료시간 표시")
-                    Switch(
-                        checked = showSchedule,
-                        onCheckedChange = {
-                            showSchedule = it
-                            AppPrefs.setShowSchedule(this@MainActivity, it)
-                        }
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-                FilledTonalButton(
-                    onClick = { showApkInstallDialog() },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("APK 설치 (Downloads 폴더)") }
-                Spacer(Modifier.height(12.dp))
-                Button(
+                SettingButton(
+                    icon = { Icon(Icons.Filled.Print, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) },
+                    label = "인쇄 서비스 설정",
                     onClick = {
-                        val intent = Intent(this@MainActivity, WebPrintActivity::class.java)
-                        intent.putExtra(WebPrintActivity.EXTRA_SCREEN_OFF_NOW, true)
-                        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                        startActivity(intent)
-                        finish()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    )
-                ) { Text("화면 끄기") }
+                        startActivity(Intent(android.provider.Settings.ACTION_PRINT_SETTINGS))
+                    }
+                )
+                SettingButton(
+                    icon = { Icon(Icons.Filled.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) },
+                    label = "인쇄 서비스 강제 활성화",
+                    onClick = { forceEnablePrintService() }
+                )
+                SettingButton(
+                    icon = { Icon(Icons.Filled.Key, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) },
+                    label = "비밀번호 변경",
+                    onClick = { showManualPasswordChange = true }
+                )
+            }
+        }
+    }
+
+    @Composable
+    private fun SettingSwitch(
+        icon: @Composable () -> Unit,
+        label: String,
+        checked: Boolean,
+        onCheckedChange: (Boolean) -> Unit
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                icon()
+                Spacer(Modifier.width(8.dp))
+                Text(label, fontSize = 14.sp)
+            }
+            Switch(checked = checked, onCheckedChange = onCheckedChange)
+        }
+    }
+
+    @Composable
+    private fun SettingButton(
+        icon: @Composable () -> Unit,
+        label: String,
+        onClick: () -> Unit
+    ) {
+        FilledTonalButton(
+            onClick = onClick,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                icon()
+                Spacer(Modifier.width(8.dp))
+                Text(label)
             }
         }
     }
 
     @Composable
     private fun ScheduleCard() {
+        var expanded by remember { mutableStateOf(false) }
         val dayNames = listOf("월", "화", "수", "목", "금", "토", "일")
+
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    "자동 시작/종료 스케줄",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    "종료 시간에 자동 전원 OFF, 시작 시간에 RTC 알람으로 자동 전원 ON",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(8.dp))
-                dayNames.forEachIndexed { index, name ->
-                    ScheduleRow(index, name)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { expanded = !expanded },
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Filled.Schedule,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                "자동 시작/종료 스케줄",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "종료 시간에 자동 OFF, 시작 시간에 RTC 알람 ON",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Icon(
+                        if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                AnimatedVisibility(visible = expanded) {
+                    Column(modifier = Modifier.padding(top = 8.dp)) {
+                        dayNames.forEachIndexed { index, name ->
+                            ScheduleRow(index, name)
+                        }
+                    }
                 }
             }
         }
@@ -431,25 +1239,29 @@ class MainActivity : ComponentActivity() {
         PowerScheduleManager.scheduleNext(this)
     }
 
+    // ══════════════════════════════════════════════════════════════════════
+    // ── TEST TAB ──────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════════════════
+
+    @OptIn(ExperimentalLayoutApi::class)
     @Composable
-    private fun DeviceStatusCard() {
-        ElevatedCard(
-            modifier = Modifier.fillMaxWidth(),
-            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+    private fun TestTab() {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("장치 상태", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = deviceStatus,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp
-                )
-            }
+            DirectPrintTestCard()
+            TextPrintCard()
+            OtherCard()
+            LogCard()
+            Spacer(Modifier.height(16.dp))
         }
     }
 
+    @OptIn(ExperimentalLayoutApi::class)
     @Composable
     private fun DirectPrintTestCard() {
         ElevatedCard(
@@ -457,30 +1269,48 @@ class MainActivity : ComponentActivity() {
             elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
         ) {
             Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.padding(16.dp)
             ) {
-                Text("직접 인쇄 테스트", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-
-                OutlinedButton(onClick = { testConnection() }, modifier = Modifier.fillMaxWidth()) {
-                    Text("연결 테스트")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.Print,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("직접 인쇄 테스트", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 }
-                OutlinedButton(onClick = { testLabelPrint() }, modifier = Modifier.fillMaxWidth()) {
-                    Text("청구기호 라벨 인쇄")
-                }
-                OutlinedButton(onClick = { testQrPrint() }, modifier = Modifier.fillMaxWidth()) {
-                    Text("QR코드 인쇄")
-                }
-                OutlinedButton(onClick = { testImagePrint() }, modifier = Modifier.fillMaxWidth()) {
-                    Text("이미지 인쇄")
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { testCutType(full = true) }, modifier = Modifier.weight(1f)) {
-                        Text("전체 절단")
-                    }
-                    OutlinedButton(onClick = { testCutType(full = false) }, modifier = Modifier.weight(1f)) {
-                        Text("부분 절단")
-                    }
+                Spacer(Modifier.height(8.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    maxItemsInEachRow = 2
+                ) {
+                    OutlinedButton(
+                        onClick = { testConnection() },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("연결테스트") }
+                    OutlinedButton(
+                        onClick = { testLabelPrint() },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("라벨인쇄") }
+                    OutlinedButton(
+                        onClick = { testQrPrint() },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("QR인쇄") }
+                    OutlinedButton(
+                        onClick = { testImagePrint() },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("이미지인쇄") }
+                    OutlinedButton(
+                        onClick = { testCutType(full = true) },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("전체절단") }
+                    OutlinedButton(
+                        onClick = { testCutType(full = false) },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("부분절단") }
                 }
             }
         }
@@ -534,6 +1364,10 @@ class MainActivity : ComponentActivity() {
                     onClick = { startActivity(Intent(this@MainActivity, LadderGameActivity::class.java)) },
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("사다리 게임") }
+                FilledTonalButton(
+                    onClick = { startActivity(Intent(this@MainActivity, BingoGameActivity::class.java)) },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("빙고 게임") }
             }
         }
     }
@@ -571,6 +1405,35 @@ class MainActivity : ComponentActivity() {
             }
         }
         log("장치 상태 확인 완료")
+    }
+
+    // ── Device IP ─────────────────────────────────────────────────────────
+
+    private fun getDeviceIp(): String {
+        // 1) Try NetworkInterface (works for both WiFi and Ethernet)
+        try {
+            val interfaces = java.net.NetworkInterface.getNetworkInterfaces()
+            if (interfaces != null) {
+                for (ni in interfaces) {
+                    if (ni.isLoopback || !ni.isUp) continue
+                    for (addr in ni.inetAddresses) {
+                        if (addr is java.net.Inet4Address && !addr.isLoopbackAddress) {
+                            return addr.hostAddress ?: continue
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+        // 2) Fallback: WifiManager
+        try {
+            @Suppress("DEPRECATION")
+            val wm = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
+            val ip = wm.connectionInfo.ipAddress
+            if (ip != 0) {
+                return "${ip and 0xFF}.${(ip shr 8) and 0xFF}.${(ip shr 16) and 0xFF}.${(ip shr 24) and 0xFF}"
+            }
+        } catch (_: Exception) {}
+        return "N/A"
     }
 
     // ── Test: Connection ─────────────────────────────────────────────────
@@ -859,6 +1722,29 @@ class MainActivity : ComponentActivity() {
             Log.e(TAG, "APK install error", e)
             Toast.makeText(this, "설치 오류: ${e.message}", Toast.LENGTH_LONG).show()
         }
+    }
+
+    // ── Print Service ─────────────────────────────────────────────────────
+
+    private fun forceEnablePrintService() {
+        Thread {
+            try {
+                val component = "${packageName}/com.betona.printdriver.LibroPrintService"
+                val p = Runtime.getRuntime().exec(arrayOf(
+                    "sh", "-c", "settings put secure enabled_print_services $component"
+                ))
+                p.waitFor()
+                runOnUiThread {
+                    Toast.makeText(this, "인쇄 서비스 활성화 완료", Toast.LENGTH_SHORT).show()
+                }
+                Log.d(TAG, "PrintService force-enabled: $component")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to enable PrintService", e)
+                runOnUiThread {
+                    Toast.makeText(this, "활성화 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }.start()
     }
 
     // ── Logging ──────────────────────────────────────────────────────────

@@ -16,6 +16,10 @@ class WebManagementServer(
 
     private val TAG = "WebManagementServer"
 
+    init {
+        AuthManager.init(context)
+    }
+
     override fun serve(session: IHTTPSession): Response {
         val uri = session.uri ?: "/"
         val method = session.method
@@ -79,6 +83,9 @@ class WebManagementServer(
                 jsonResponse(Response.Status.OK,
                     JSONObject().put("success", true).put("data", JSONObject().put("message", "로그아웃 완료")))
             }
+            uri == "/api/auth/change-password" && method == Method.POST -> {
+                handleChangePassword(session, token)
+            }
             uri == "/api/status" && method == Method.GET -> {
                 jsonResponse(Response.Status.OK, PrinterApi.getStatus())
             }
@@ -89,7 +96,7 @@ class WebManagementServer(
                 jsonResponse(Response.Status.OK, PrinterApi.feed())
             }
             uri == "/api/print/cut" && method == Method.POST -> {
-                jsonResponse(Response.Status.OK, PrinterApi.cut())
+                jsonResponse(Response.Status.OK, PrinterApi.cut(context))
             }
             uri == "/api/device" && method == Method.GET -> {
                 jsonResponse(Response.Status.OK, DeviceApi.getDeviceInfo(context))
@@ -112,13 +119,41 @@ class WebManagementServer(
         val body = parseJsonBody(session)
         val username = body.optString("username", "")
         val password = body.optString("password", "")
-        val token = AuthManager.login(username, password)
-        return if (token != null) {
+        val result = AuthManager.login(username, password)
+        return if (result != null) {
             jsonResponse(Response.Status.OK,
-                JSONObject().put("success", true).put("data", JSONObject().put("token", token)))
+                JSONObject().put("success", true).put("data",
+                    JSONObject().put("token", result.token)
+                        .put("requirePasswordChange", result.requirePasswordChange)))
         } else {
             jsonResponse(Response.Status.UNAUTHORIZED,
                 JSONObject().put("success", false).put("error", "아이디 또는 비밀번호가 올바르지 않습니다"))
+        }
+    }
+
+    private fun handleChangePassword(session: IHTTPSession, token: String): Response {
+        val body = parseJsonBody(session)
+        val currentPassword = body.optString("currentPassword", "").ifEmpty { null }
+        val newPassword = body.optString("newPassword", "")
+        val confirmPassword = body.optString("confirmPassword", "")
+
+        if (newPassword != confirmPassword) {
+            return jsonResponse(Response.Status.OK,
+                JSONObject().put("success", false).put("error", "비밀번호가 일치하지 않습니다"))
+        }
+        if (newPassword.length < 4) {
+            return jsonResponse(Response.Status.OK,
+                JSONObject().put("success", false).put("error", "비밀번호는 4자리 이상이어야 합니다"))
+        }
+
+        val changed = AuthManager.changePassword(token, currentPassword, newPassword)
+        return if (changed) {
+            jsonResponse(Response.Status.OK,
+                JSONObject().put("success", true).put("data",
+                    JSONObject().put("message", "비밀번호가 변경되었습니다")))
+        } else {
+            jsonResponse(Response.Status.OK,
+                JSONObject().put("success", false).put("error", "현재 비밀번호가 올바르지 않습니다"))
         }
     }
 

@@ -2,6 +2,7 @@ package com.betona.printdriver.web
 
 import android.content.Context
 import android.util.Log
+import com.betona.printdriver.AppPrefs
 import com.betona.printdriver.BitmapConverter
 import com.betona.printdriver.DevicePrinter
 import com.betona.printdriver.EscPosCommands
@@ -36,7 +37,7 @@ object PrinterApi {
                 ?: return@printerAction error("Failed to create test bitmap")
             val monoData = BitmapConverter.toMonochrome(bitmap)
             val trimmed = BitmapConverter.trimTrailingWhiteRows(monoData)
-            DevicePrinter.printBitmapAndCut(trimmed)
+            DevicePrinter.printBitmapAndCut(trimmed, fullCut = AppPrefs.isFullCut(context))
             success(JSONObject().put("message", "테스트 인쇄 완료"))
         }
     }
@@ -48,9 +49,9 @@ object PrinterApi {
         }
     }
 
-    fun cut(): JSONObject {
+    fun cut(context: Context): JSONObject {
         return printerAction("cut") {
-            DevicePrinter.feedAndCut()
+            DevicePrinter.feedAndCut(fullCut = AppPrefs.isFullCut(context))
             success(JSONObject().put("message", "용지 절단 완료"))
         }
     }

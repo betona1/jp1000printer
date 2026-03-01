@@ -4,6 +4,7 @@
 
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -31,6 +32,12 @@
             android:name=".LadderGameActivity"
             android:exported="false"
             android:label="사다리 게임" />
+
+        <!-- Bingo Game Activity -->
+        <activity
+            android:name=".BingoGameActivity"
+            android:exported="false"
+            android:label="빙고 게임" />
 
         <!-- Web Print Activity — Launcher (desktop mode WebView) -->
         <activity
