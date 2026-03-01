@@ -25,7 +25,7 @@ import java.util.UUID
  * Flow: Android device -> mDNS discovery -> Get-Printer-Attributes ->
  *       Print-Job (PDF) -> PdfRenderer -> thermal print
  */
-class IppServer(private val port: Int = 631) {
+class IppServer(private val port: Int = 6631) {
 
     private var serverSocket: ServerSocket? = null
     private var listenThread: Thread? = null

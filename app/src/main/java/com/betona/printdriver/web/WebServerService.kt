@@ -127,7 +127,7 @@ class WebServerService : Service() {
         private const val TAG = "WebServerService"
         private const val PORT = 8080
         private const val RAW_PORT = 9100
-        private const val IPP_PORT = 631
+        private const val IPP_PORT = 6631
         private const val CHANNEL_ID = "web_server_channel"
         private const val NOTIFICATION_ID = 9080
 
