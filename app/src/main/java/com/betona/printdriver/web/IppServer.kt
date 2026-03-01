@@ -2,12 +2,13 @@ package com.betona.printdriver.web
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import android.os.Build
 import android.os.ParcelFileDescriptor
+import android.provider.Settings
 import android.util.Log
 import com.betona.printdriver.BitmapConverter
 import com.betona.printdriver.DevicePrinter
@@ -36,14 +37,24 @@ class IppServer(private val port: Int = 6631) {
     private var registrationListener: NsdManager.RegistrationListener? = null
     private var jobIdCounter = 1000
 
-    // Stable UUID derived from package name (consistent across reboots)
-    private val printerUuid: String = UUID.nameUUIDFromBytes(
-        "LibroPrinter-JY-P1000".toByteArray()
-    ).toString()
+    // Per-device UUID and name (set in start() from device serial/ID)
+    private lateinit var printerUuid: String
+    private lateinit var printerName: String
 
     // ── Lifecycle ────────────────────────────────────────────────────────
 
+    @Suppress("DEPRECATION", "HardwareIds")
     fun start(context: Context) {
+        // Generate per-device UUID from Android ID (unique per device)
+        val androidId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown"
+        printerUuid = UUID.nameUUIDFromBytes("LibroPrinter-$androidId".toByteArray()).toString()
+
+        // Device-specific name using model suffix (e.g. "LibroPrinter-P1000", "LibroPrinter-A40i")
+        val model = Build.MODEL?.replace(" ", "") ?: "Unknown"
+        val shortModel = if (model.length > 10) model.takeLast(10) else model
+        printerName = "LibroPrinter-$shortModel"
+        Log.i(TAG, "Printer name=$printerName, uuid=$printerUuid, androidId=$androidId")
+
         if (running) return
         running = true
         listenThread = Thread({
@@ -173,8 +184,8 @@ class IppServer(private val port: Int = 6631) {
         out.writeUri("printer-uri-supported", printerUri)
         out.writeKeyword("uri-security-supported", "none")
         out.writeKeyword("uri-authentication-supported", "none")
-        out.writeName("printer-name", "LibroPrinter")
-        out.writeText("printer-info", "LibroPrinter Thermal Receipt Printer")
+        out.writeName("printer-name", printerName)
+        out.writeText("printer-info", "$printerName Thermal Receipt Printer")
         out.writeText("printer-make-and-model", "LibroPrinter Thermal")
         out.writeUri("printer-more-info", "http://$ip:8080")
         out.writeUri("printer-uuid", "urn:uuid:$printerUuid")
@@ -205,34 +216,20 @@ class IppServer(private val port: Int = 6631) {
         out.writeNaturalLanguage("natural-language-configured", "en")
         out.writeNaturalLanguage("generated-natural-language-supported", "en")
 
-        // Media — 72mm thermal roll paper (576px at 203 DPI)
-        // Dimensions in hundredths of mm: 72mm=7200, 150mm=15000, etc.
-        val W = 7200  // 72mm width
-        val heights = intArrayOf(15000, 20000, 29700) // 150, 200, 297mm
+        // Media — 4x6" as default (closest standard size to 72mm thermal).
+        // 4" = 101.6mm → scaled to 72mm ≈ 71%, much better than A4's 34%.
+        out.writeKeyword("media-supported", "na_index-4x6_4x6in")
+        out.writeKeywordValue("iso_a5_148x210mm")
+        out.writeKeywordValue("iso_a4_210x297mm")
+        out.writeKeywordValue("na_letter_8.5x11in")
+        out.writeKeyword("media-default", "na_index-4x6_4x6in")
+        out.writeKeyword("media-ready", "na_index-4x6_4x6in")
 
-        out.writeKeyword("media-supported", "custom_roll_72x150mm")
-        out.writeKeywordValue("custom_roll_72x200mm")
-        out.writeKeywordValue("custom_roll_72x297mm")
-        out.writeKeyword("media-default", "custom_roll_72x150mm")
-        out.writeKeyword("media-ready", "custom_roll_72x150mm")
-
-        // media-size-supported — exact dimensions for Windows/Android
-        out.writeMediaSize("media-size-supported", W, heights[0])
-        for (h in heights.drop(1)) out.writeMediaSizeValue(W, h)
-
-        // media-col-database — full collection Android BIPS reads first
-        out.writeKeyword("media-col-supported", "media-size")
-        out.writeKeywordValue("media-left-margin")
-        out.writeKeywordValue("media-right-margin")
-        out.writeKeywordValue("media-top-margin")
-        out.writeKeywordValue("media-bottom-margin")
-        for ((idx, h) in heights.withIndex()) {
-            if (idx == 0) out.writeMediaColEntry("media-col-database", W, h)
-            else out.writeMediaColEntryValue(W, h)
-        }
-
-        // media-col-default — default 72x150mm, 0 margins
-        out.writeMediaColEntry("media-col-default", W, heights[0])
+        // media-size-supported — dimensions in hundredths of mm
+        out.writeMediaSize("media-size-supported", 10160, 15240)  // 4x6"
+        out.writeMediaSizeValue(14800, 21000)  // A5
+        out.writeMediaSizeValue(21000, 29700)  // A4
+        out.writeMediaSizeValue(21590, 27940)  // Letter
 
         // Color
         out.writeKeyword("print-color-mode-supported", "monochrome")
@@ -318,7 +315,7 @@ class IppServer(private val port: Int = 6631) {
             for (i in 0 until pageCount) {
                 val page = renderer.openPage(i)
 
-                // Render at 3x printer width for high resolution
+                // Render at 3x printer width for quality, then crop+scale
                 val renderWidth = pw * 3 // 1728px
                 val renderHeight = maxOf(1, (renderWidth.toDouble() * page.height / page.width).toInt())
 
@@ -327,68 +324,22 @@ class IppServer(private val port: Int = 6631) {
                 page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
                 page.close()
 
-                // Crop white margins
+                // Crop white margins → scale to printer width
                 val cropped = BitmapConverter.cropWhiteBorders(bitmap)
                 if (cropped !== bitmap) bitmap.recycle()
+                val scaled = BitmapConverter.scaleToWidth(cropped, pw)
+                if (scaled !== cropped) cropped.recycle()
 
-                val cw = cropped.width
-                val ch = cropped.height
-                val isLastPage = (i == pageCount - 1)
+                val mono = BitmapConverter.toMonochrome(scaled)
+                val trimmed = BitmapConverter.trimTrailingWhiteRows(mono)
+                scaled.recycle()
 
-                // Threshold: if content width > 1.5x printer width, it's wide
-                // content (e.g. A4 독서로) — split into vertical strips
-                if (cw > pw * 1.5) {
-                    // Strip-splitting mode: slice into pw-wide vertical strips
-                    val stripCount = (cw + pw - 1) / pw
-                    Log.i(TAG, "Page ${i + 1}: wide content ${cw}x${ch}, splitting into $stripCount strips")
-
-                    for (s in 0 until stripCount) {
-                        val srcX = s * pw
-                        val srcW = minOf(pw, cw - srcX)
-
-                        // Create strip bitmap at printer width
-                        val stripH = ch
-                        val strip = Bitmap.createBitmap(pw, stripH, Bitmap.Config.ARGB_8888)
-                        strip.eraseColor(Color.WHITE)
-                        val canvas = Canvas(strip)
-
-                        // Copy the slice from cropped bitmap
-                        val srcSlice = Bitmap.createBitmap(cropped, srcX, 0, srcW, ch)
-                        canvas.drawBitmap(srcSlice, 0f, 0f, null)
-                        srcSlice.recycle()
-
-                        val mono = BitmapConverter.toMonochrome(strip)
-                        val trimmed = BitmapConverter.trimTrailingWhiteRows(mono)
-                        strip.recycle()
-
-                        val isLastStrip = (s == stripCount - 1)
-                        if (isLastPage && isLastStrip) {
-                            DevicePrinter.printBitmapAndCut(trimmed)
-                        } else {
-                            DevicePrinter.printBitmap(trimmed)
-                            DevicePrinter.feedAndCut()
-                        }
-                        Log.i(TAG, "  Strip ${s + 1}/$stripCount: ${trimmed.size} bytes")
-                    }
+                if (i == pageCount - 1) {
+                    DevicePrinter.printBitmapAndCut(trimmed)
                 } else {
-                    // Narrow content — scale to fill printer width (original behavior)
-                    val scaled = BitmapConverter.scaleToWidth(cropped, pw)
-                    if (scaled !== cropped) cropped.recycle()
-
-                    val mono = BitmapConverter.toMonochrome(scaled)
-                    val trimmed = BitmapConverter.trimTrailingWhiteRows(mono)
-                    scaled.recycle()
-
-                    if (isLastPage) {
-                        DevicePrinter.printBitmapAndCut(trimmed)
-                    } else {
-                        DevicePrinter.printBitmap(trimmed)
-                    }
-                    Log.i(TAG, "Page ${i + 1}/$pageCount: ${trimmed.size} bytes")
+                    DevicePrinter.printBitmap(trimmed)
                 }
-
-                // Recycle cropped if still alive (wide path doesn't recycle it above)
-                if (!cropped.isRecycled) cropped.recycle()
+                Log.i(TAG, "Page ${i + 1}/$pageCount: ${trimmed.size} bytes")
             }
         } finally {
             renderer.close()
@@ -729,13 +680,13 @@ class IppServer(private val port: Int = 6631) {
     private fun registerMdns(context: Context) {
         try {
             val serviceInfo = NsdServiceInfo().apply {
-                serviceName = "LibroPrinter"
+                serviceName = printerName
                 serviceType = "_ipp._tcp"
                 port = this@IppServer.port
                 setAttribute("txtvers", "1")
                 setAttribute("pdl", "application/pdf")
                 setAttribute("rp", "ipp/print")
-                setAttribute("ty", "LibroPrinter")
+                setAttribute("ty", printerName)
                 setAttribute("UUID", printerUuid)
                 setAttribute("product", "(LibroPrinter Thermal)")
                 setAttribute("note", "Thermal Receipt Printer")
