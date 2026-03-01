@@ -204,9 +204,21 @@ class IppServer(private val port: Int = 6631) {
         out.writeNaturalLanguage("natural-language-configured", "en")
         out.writeNaturalLanguage("generated-natural-language-supported", "en")
 
-        // Media
-        out.writeKeyword("media-supported", "custom_72x200mm")
-        out.writeKeyword("media-default", "custom_72x200mm")
+        // Media — 80mm thermal paper, matching Windows RAW driver settings
+        // Android BIPS parses: custom_<name>_<width>x<height><unit>
+        out.writeKeyword("media-supported", "custom_thermal_80x150mm")
+        out.writeKeywordValue("custom_thermal_80x200mm")
+        out.writeKeywordValue("custom_thermal_80x297mm")
+        out.writeKeyword("media-default", "custom_thermal_80x150mm")
+        out.writeKeyword("media-ready", "custom_thermal_80x150mm")
+
+        // media-size-supported — exact dimensions in hundredths of mm
+        // (Windows and Android use this for precise paper size)
+        out.writeMediaSize("media-size-supported", 8000, 15000)
+        out.writeMediaSizeValue(8000, 20000)
+        out.writeMediaSizeValue(8000, 29700)
+
+        out.writeKeyword("media-col-supported", "media-size")
 
         // Color
         out.writeKeyword("print-color-mode-supported", "monochrome")
@@ -484,6 +496,63 @@ class IppServer(private val port: Int = 6631) {
 
     private fun ByteArrayOutputStream.writeBool(name: String, value: Boolean) =
         writeAttr(0x22, name, byteArrayOf(if (value) 1 else 0))
+
+    // ── IPP Collection Helpers (for media-size-supported etc.) ───────────
+
+    private fun ByteArrayOutputStream.writeBeginCollection(name: String) {
+        write(0x34) // begCollection
+        val nameBytes = name.toByteArray(Charsets.UTF_8)
+        writeShortBE(nameBytes.size)
+        write(nameBytes)
+        writeShortBE(0) // value-length always 0
+    }
+
+    private fun ByteArrayOutputStream.writeBeginCollectionValue() {
+        write(0x34) // begCollection (additional value)
+        writeShortBE(0) // name-length = 0
+        writeShortBE(0)
+    }
+
+    private fun ByteArrayOutputStream.writeMemberName(memberName: String) {
+        write(0x4A) // memberAttrName
+        writeShortBE(0)
+        val nameBytes = memberName.toByteArray(Charsets.UTF_8)
+        writeShortBE(nameBytes.size)
+        write(nameBytes)
+    }
+
+    private fun ByteArrayOutputStream.writeMemberInteger(value: Int) {
+        write(0x21) // integer
+        writeShortBE(0)
+        writeShortBE(4)
+        writeIntBE(value)
+    }
+
+    private fun ByteArrayOutputStream.writeEndCollection() {
+        write(0x37) // endCollection
+        writeShortBE(0)
+        writeShortBE(0)
+    }
+
+    /** Write a media-size collection: { x-dimension, y-dimension } in hundredths of mm */
+    private fun ByteArrayOutputStream.writeMediaSize(name: String, widthHmm: Int, heightHmm: Int) {
+        writeBeginCollection(name)
+        writeMemberName("x-dimension")
+        writeMemberInteger(widthHmm)
+        writeMemberName("y-dimension")
+        writeMemberInteger(heightHmm)
+        writeEndCollection()
+    }
+
+    /** Additional media-size value (same attribute) */
+    private fun ByteArrayOutputStream.writeMediaSizeValue(widthHmm: Int, heightHmm: Int) {
+        writeBeginCollectionValue()
+        writeMemberName("x-dimension")
+        writeMemberInteger(widthHmm)
+        writeMemberName("y-dimension")
+        writeMemberInteger(heightHmm)
+        writeEndCollection()
+    }
 
     // ── HTTP Helpers ─────────────────────────────────────────────────────
 
