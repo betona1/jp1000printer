@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:allowBackup="false"
+        android:label="LibroPrinter 플러그인"
+        android:supportsRtl="true">
+
+        <service
+            android:name=".LibroNetPrintService"
+            android:exported="true"
+            android:permission="android.permission.BIND_PRINT_SERVICE">
+            <intent-filter>
+                <action android:name="android.printservice.PrintService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.print.printservice"
+                android:resource="@xml/print_service_info" />
+        </service>
+
+    </application>
+
+</manifest>

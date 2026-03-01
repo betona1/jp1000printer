@@ -22,3 +22,4 @@ dependencyResolutionManagement {
 rootProject.name = "LibroPrintDriver"
 include(":app")
 include(":jyndklib")
+include(":printplugin")
