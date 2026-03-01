@@ -247,7 +247,7 @@ class WebPrintActivity : AppCompatActivity() {
         if (isPrinting) {
             isPrinting = false
             destroyPrintWebView()
-            showPostPrintDialog()
+            goHome()
             return
         }
         val schoolUrl = AppPrefs.getSchoolUrl(this)
@@ -279,36 +279,6 @@ class WebPrintActivity : AppCompatActivity() {
         val printManager = getSystemService(PRINT_SERVICE) as PrintManager
         val adapter = webView.createPrintDocumentAdapter(title)
         printManager.print(title, adapter, null)
-    }
-
-    private fun showPostPrintDialog() {
-        var secondsLeft = 3
-        val dialog = AlertDialog.Builder(this)
-            .setMessage("홈으로 이동합니다... (3)")
-            .setNegativeButton("취소", null)
-            .setCancelable(true)
-            .create()
-
-        val handler = Handler(Looper.getMainLooper())
-        val countdown = object : Runnable {
-            override fun run() {
-                secondsLeft--
-                if (secondsLeft > 0) {
-                    dialog.setMessage("홈으로 이동합니다... ($secondsLeft)")
-                    handler.postDelayed(this, 1000)
-                } else {
-                    dialog.dismiss()
-                    goHome()
-                }
-            }
-        }
-
-        dialog.setOnDismissListener {
-            handler.removeCallbacks(countdown)
-        }
-
-        dialog.show()
-        handler.postDelayed(countdown, 1000)
     }
 
     /** Manual screen off — confirm then turn off screen */
