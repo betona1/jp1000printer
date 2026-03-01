@@ -14,8 +14,12 @@ class WebServerInitProvider : ContentProvider() {
 
     override fun onCreate(): Boolean {
         val ctx = context ?: return false
-        Log.i(TAG, "Auto-starting web management server")
-        WebServerService.start(ctx)
+        try {
+            Log.i(TAG, "Auto-starting web management server")
+            WebServerService.start(ctx)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start web server service", e)
+        }
         return true
     }
 

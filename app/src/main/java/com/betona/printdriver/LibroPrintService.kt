@@ -98,57 +98,82 @@ class LibroPrintService : PrintService() {
 
         val tempFile = File.createTempFile("print_", ".pdf", cacheDir)
         try {
-            FileInputStream(fd.fileDescriptor).use { input ->
-                FileOutputStream(tempFile).use { output ->
-                    input.copyTo(output)
+            // BUGFIX: fd.use ensures ParcelFileDescriptor is always closed
+            fd.use { pfd ->
+                FileInputStream(pfd.fileDescriptor).use { input ->
+                    FileOutputStream(tempFile).use { output ->
+                        input.copyTo(output)
+                    }
                 }
             }
-            fd.close()
         } catch (e: Exception) {
             tempFile.delete()
             throw RuntimeException("PDF 임시 파일 생성 실패: ${e.message}")
         }
 
         val seekableFd = ParcelFileDescriptor.open(tempFile, ParcelFileDescriptor.MODE_READ_ONLY)
-        val pdfRenderer = PdfRenderer(seekableFd)
-        val pageCount = pdfRenderer.pageCount
-        Log.i(TAG, "PDF pages: $pageCount, tempFile: ${tempFile.length()} bytes")
+        try {
+            val pdfRenderer = PdfRenderer(seekableFd)
+            try {
+                val pageCount = pdfRenderer.pageCount
+                Log.i(TAG, "PDF pages: $pageCount, tempFile: ${tempFile.length()} bytes")
 
-        for (i in 0 until pageCount) {
-            val page = pdfRenderer.openPage(i)
+                for (i in 0 until pageCount) {
+                    val page = pdfRenderer.openPage(i)
+                    try {
+                        val scale = DevicePrinter.PRINT_WIDTH_PX.toFloat() / page.width
+                        val bitmapWidth = DevicePrinter.PRINT_WIDTH_PX
+                        // BUGFIX: prevent zero-height bitmap (IllegalArgumentException)
+                        val bitmapHeight = maxOf(1, (page.height * scale).toInt())
+                        Log.d(TAG, "Page ${i+1}/$pageCount: ${page.width}x${page.height} → ${bitmapWidth}x${bitmapHeight}")
 
-            val scale = DevicePrinter.PRINT_WIDTH_PX.toFloat() / page.width
-            val bitmapWidth = DevicePrinter.PRINT_WIDTH_PX
-            val bitmapHeight = (page.height * scale).toInt()
-            Log.d(TAG, "Page ${i+1}/$pageCount: ${page.width}x${page.height} → ${bitmapWidth}x${bitmapHeight}")
+                        // BUGFIX: bitmap recycling guaranteed via try-finally
+                        var bitmap: Bitmap? = null
+                        var cropped: Bitmap? = null
+                        var scaled: Bitmap? = null
+                        try {
+                            bitmap = Bitmap.createBitmap(bitmapWidth, bitmapHeight, Bitmap.Config.ARGB_8888)
+                            Canvas(bitmap).drawColor(Color.WHITE)
+                            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
 
-            var bitmap = Bitmap.createBitmap(bitmapWidth, bitmapHeight, Bitmap.Config.ARGB_8888)
-            Canvas(bitmap).drawColor(Color.WHITE)
-            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
-            page.close()
+                            cropped = BitmapConverter.cropWhiteBorders(bitmap)
+                            Log.d(TAG, "Page ${i+1}: render=${bitmap.width}x${bitmap.height} crop=${cropped.width}x${cropped.height}")
+                            if (cropped !== bitmap) { bitmap.recycle(); bitmap = null }
 
-            val cropped = BitmapConverter.cropWhiteBorders(bitmap)
-            Log.d(TAG, "Page ${i+1}: render=${bitmap.width}x${bitmap.height} crop=${cropped.width}x${cropped.height}")
-            if (cropped !== bitmap) bitmap.recycle()
-            val scaled = BitmapConverter.scaleToWidth(cropped, DevicePrinter.PRINT_WIDTH_PX)
-            if (scaled !== cropped) cropped.recycle()
+                            scaled = BitmapConverter.scaleToWidth(cropped, DevicePrinter.PRINT_WIDTH_PX)
+                            if (scaled !== cropped) { cropped.recycle(); cropped = null }
 
-            val monoRaw = BitmapConverter.toMonochrome(scaled)
-            scaled.recycle()
+                            val monoRaw = BitmapConverter.toMonochrome(scaled)
+                            scaled.recycle(); scaled = null
 
-            val monoData = BitmapConverter.trimTrailingWhiteRows(monoRaw)
-            Log.d(TAG, "Page ${i+1}: mono=${monoRaw.size} trimmed=${monoData.size} bytes")
+                            val monoData = BitmapConverter.trimTrailingWhiteRows(monoRaw)
+                            Log.d(TAG, "Page ${i+1}: mono=${monoRaw.size} trimmed=${monoData.size} bytes")
 
-            val isLastPage = (i == pageCount - 1)
-            if (isLastPage) {
-                activePrinter.printBitmapAndCut(monoData, fullCut = AppPrefs.isFullCut(this))
-            } else {
-                activePrinter.printBitmap(monoData)
+                            val isLastPage = (i == pageCount - 1)
+                            if (isLastPage) {
+                                activePrinter.printBitmapAndCut(monoData, fullCut = AppPrefs.isFullCut(this))
+                            } else {
+                                activePrinter.printBitmap(monoData)
+                            }
+                            Log.d(TAG, "Page ${i+1} printed${if (isLastPage) " + cut" else ""}")
+                        } finally {
+                            bitmap?.recycle()
+                            cropped?.recycle()
+                            scaled?.recycle()
+                        }
+                    } finally {
+                        // BUGFIX: page always closed in finally
+                        page.close()
+                    }
+                }
+            } finally {
+                pdfRenderer.close()
             }
-            Log.d(TAG, "Page ${i+1} printed${if (isLastPage) " + cut" else ""}")
+        } finally {
+            // BUGFIX: seekableFd always closed, tempFile always deleted
+            try { seekableFd.close() } catch (_: Exception) {}
+            tempFile.delete()
         }
-        pdfRenderer.close()
-        tempFile.delete()
         Log.d(TAG, "doPrint complete")
     }
 }

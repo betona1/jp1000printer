@@ -24,5 +24,8 @@ class ScreenOffReceiver : BroadcastReceiver() {
             putExtra(EXTRA_SCREEN_OFF_COUNTDOWN, true)
         }
         context.startActivity(launchIntent)
+
+        // Schedule next alarm for tomorrow
+        PowerScheduleManager.scheduleNext(context)
     }
 }

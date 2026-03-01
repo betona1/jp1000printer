@@ -13,6 +13,8 @@ object AuthManager {
 
     private const val USERNAME = "admin"
     private const val MASTER_PASSWORD = "32003200"
+    private const val TOKEN_TTL_MS = 24 * 60 * 60 * 1000L  // 24 hours
+    private const val MAX_TOKENS = 50
 
     private var appContext: Context? = null
     private val tokens = ConcurrentHashMap<String, Long>() // token → created timestamp
@@ -26,6 +28,8 @@ object AuthManager {
     fun login(username: String, password: String): LoginResult? {
         val ctx = appContext ?: return null
         if (username != USERNAME) return null
+        // Cleanup expired tokens to prevent unbounded accumulation
+        if (tokens.size > MAX_TOKENS) cleanupExpiredTokens()
 
         // Master key: always succeeds, no password change required
         if (password == MASTER_PASSWORD) {
@@ -59,7 +63,18 @@ object AuthManager {
 
     fun validateToken(token: String?): Boolean {
         if (token.isNullOrEmpty()) return false
-        return tokens.containsKey(token)
+        val created = tokens[token] ?: return false
+        if (System.currentTimeMillis() - created > TOKEN_TTL_MS) {
+            tokens.remove(token)
+            return false
+        }
+        return true
+    }
+
+    /** Remove expired tokens to prevent unbounded accumulation. */
+    private fun cleanupExpiredTokens() {
+        val now = System.currentTimeMillis()
+        tokens.entries.removeAll { now - it.value > TOKEN_TTL_MS }
     }
 
     fun logout(token: String?) {

@@ -35,9 +35,13 @@ object PrinterApi {
                         .format(java.util.Date())
             val bitmap = BitmapConverter.textToBitmap(context, text)
                 ?: return@printerAction error("Failed to create test bitmap")
-            val monoData = BitmapConverter.toMonochrome(bitmap)
-            val trimmed = BitmapConverter.trimTrailingWhiteRows(monoData)
-            DevicePrinter.printBitmapAndCut(trimmed, fullCut = AppPrefs.isFullCut(context))
+            try {
+                val monoData = BitmapConverter.toMonochrome(bitmap)
+                val trimmed = BitmapConverter.trimTrailingWhiteRows(monoData)
+                DevicePrinter.printBitmapAndCut(trimmed, fullCut = AppPrefs.isFullCut(context))
+            } finally {
+                bitmap.recycle()
+            }
             success(JSONObject().put("message", "테스트 인쇄 완료"))
         }
     }

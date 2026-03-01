@@ -16,8 +16,6 @@ class BootCompletedReceiver : BroadcastReceiver() {
 
     companion object {
         private const val TAG = "BootReceiver"
-        private const val SERVICE_COMPONENT =
-            "com.android.printdriver/com.betona.printdriver.LibroPrintService"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -29,8 +27,12 @@ class BootCompletedReceiver : BroadcastReceiver() {
                 // Wait for system services to be fully ready
                 Thread.sleep(5000)
 
+                // Dynamic component name: works for both standard and a40 flavors
+                val serviceComponent =
+                    "${context.packageName}/com.betona.printdriver.LibroPrintService"
+
                 val commands = arrayOf(
-                    "settings put secure enabled_print_services $SERVICE_COMPONENT",
+                    "settings put secure enabled_print_services $serviceComponent",
                     "settings put secure disabled_print_services ''",
                     "pm grant com.android.printspooler android.permission.ACCESS_COARSE_LOCATION",
                     "pm grant com.android.printspooler android.permission.ACCESS_FINE_LOCATION"
@@ -38,8 +40,11 @@ class BootCompletedReceiver : BroadcastReceiver() {
 
                 for (cmd in commands) {
                     val process = Runtime.getRuntime().exec(arrayOf("su", "0", "sh", "-c", cmd))
-                    val exit = process.waitFor()
-                    Log.d(TAG, "cmd=[$cmd] exit=$exit")
+                    // Timeout: don't hang forever if su is blocked
+                    val exited = process.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)
+                    val exit = if (exited) process.exitValue() else -1
+                    if (!exited) process.destroyForcibly()
+                    Log.d(TAG, "cmd=[$cmd] exit=$exit${if (!exited) " (timeout)" else ""}")
                 }
 
                 Log.i(TAG, "Print service configuration complete")
@@ -53,7 +58,9 @@ class BootCompletedReceiver : BroadcastReceiver() {
                     val component = "${context.packageName}/com.betona.printdriver.WebPrintActivity"
                     val cmd = "am start -n $component"
                     val process = Runtime.getRuntime().exec(arrayOf("su", "0", "sh", "-c", cmd))
-                    val exit = process.waitFor()
+                    val exited = process.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)
+                    val exit = if (exited) process.exitValue() else -1
+                    if (!exited) process.destroyForcibly()
                     Log.i(TAG, "Auto-start cmd=[$cmd] exit=$exit")
                 }
             } catch (e: Exception) {

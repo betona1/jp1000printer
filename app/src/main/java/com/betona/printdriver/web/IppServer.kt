@@ -15,6 +15,7 @@ import com.betona.printdriver.BitmapConverter
 import com.betona.printdriver.DevicePrinter
 import java.io.*
 import java.net.Inet4Address
+import java.net.InetSocketAddress
 import java.net.NetworkInterface
 import java.net.ServerSocket
 import java.net.Socket
@@ -60,8 +61,9 @@ class IppServer(private val port: Int = 6631) {
         running = true
         listenThread = Thread({
             try {
-                serverSocket = ServerSocket(port).also { ss ->
+                serverSocket = ServerSocket().also { ss ->
                     ss.reuseAddress = true
+                    ss.bind(InetSocketAddress(port))
                     Log.i(TAG, "IPP server listening on port $port")
                     while (running) {
                         try {
@@ -118,11 +120,16 @@ class IppServer(private val port: Int = 6631) {
                 }
             }
 
-            // Read body
+            // Read body (cap at 50MB to prevent OOM)
+            val maxBodySize = 50 * 1024 * 1024
             val body: ByteArray = when {
+                contentLength > maxBodySize -> {
+                    Log.e(TAG, "Content-Length too large: $contentLength")
+                    return
+                }
                 contentLength > 0 -> ByteArray(contentLength).also { readFully(input, it) }
                 chunked -> readChunked(input)
-                else -> input.readBytes()
+                else -> readLimited(input, maxBodySize)
             }
 
             // Process IPP and send HTTP response
@@ -302,48 +309,64 @@ class IppServer(private val port: Int = 6631) {
 
     private fun renderAndPrint(pdfFile: File, context: Context) {
         val fd = ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY)
-        val renderer = PdfRenderer(fd)
         try {
-            if (!DevicePrinter.isOpen) {
-                DevicePrinter.open()
-                DevicePrinter.initPrinter()
-            }
-
-            val pw = DevicePrinter.PRINT_WIDTH_PX // 576
-            val pageCount = renderer.pageCount
-            Log.i(TAG, "Rendering $pageCount page(s)")
-
-            for (i in 0 until pageCount) {
-                val page = renderer.openPage(i)
-
-                // Render at 3x printer width for quality, then crop+scale
-                val renderWidth = pw * 3 // 1728px
-                val renderHeight = maxOf(1, (renderWidth.toDouble() * page.height / page.width).toInt())
-
-                var bitmap = Bitmap.createBitmap(renderWidth, renderHeight, Bitmap.Config.ARGB_8888)
-                bitmap.eraseColor(Color.WHITE)
-                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
-                page.close()
-
-                // Crop white margins → scale to printer width
-                val cropped = BitmapConverter.cropWhiteBorders(bitmap)
-                if (cropped !== bitmap) bitmap.recycle()
-                val scaled = BitmapConverter.scaleToWidth(cropped, pw)
-                if (scaled !== cropped) cropped.recycle()
-
-                val mono = BitmapConverter.toMonochrome(scaled)
-                val trimmed = BitmapConverter.trimTrailingWhiteRows(mono)
-                scaled.recycle()
-
-                if (i == pageCount - 1) {
-                    DevicePrinter.printBitmapAndCut(trimmed, fullCut = AppPrefs.isFullCut(context))
-                } else {
-                    DevicePrinter.printBitmap(trimmed)
+            val renderer = PdfRenderer(fd)
+            try {
+                if (!DevicePrinter.isOpen) {
+                    DevicePrinter.open()
+                    DevicePrinter.initPrinter()
                 }
-                Log.i(TAG, "Page ${i + 1}/$pageCount: ${trimmed.size} bytes")
+
+                val pw = DevicePrinter.PRINT_WIDTH_PX // 576
+                val pageCount = renderer.pageCount
+                Log.i(TAG, "Rendering $pageCount page(s)")
+
+                for (i in 0 until pageCount) {
+                    val page = renderer.openPage(i)
+                    try {
+                        // Render at 3x printer width for quality, then crop+scale
+                        val renderWidth = pw * 3 // 1728px
+                        val renderHeight = maxOf(1, (renderWidth.toDouble() * page.height / page.width).toInt())
+
+                        var bitmap: Bitmap? = null
+                        var cropped: Bitmap? = null
+                        var scaled: Bitmap? = null
+                        try {
+                            bitmap = Bitmap.createBitmap(renderWidth, renderHeight, Bitmap.Config.ARGB_8888)
+                            bitmap.eraseColor(Color.WHITE)
+                            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
+
+                            // Crop white margins → scale to printer width
+                            cropped = BitmapConverter.cropWhiteBorders(bitmap)
+                            if (cropped !== bitmap) { bitmap.recycle(); bitmap = null }
+
+                            scaled = BitmapConverter.scaleToWidth(cropped, pw)
+                            if (scaled !== cropped) { cropped.recycle(); cropped = null }
+
+                            val mono = BitmapConverter.toMonochrome(scaled)
+                            val trimmed = BitmapConverter.trimTrailingWhiteRows(mono)
+                            scaled.recycle(); scaled = null
+
+                            if (i == pageCount - 1) {
+                                DevicePrinter.printBitmapAndCut(trimmed, fullCut = AppPrefs.isFullCut(context))
+                            } else {
+                                DevicePrinter.printBitmap(trimmed)
+                            }
+                            Log.i(TAG, "Page ${i + 1}/$pageCount: ${trimmed.size} bytes")
+                        } finally {
+                            bitmap?.recycle()
+                            cropped?.recycle()
+                            scaled?.recycle()
+                        }
+                    } finally {
+                        page.close()
+                    }
+                }
+            } finally {
+                renderer.close()
             }
         } finally {
-            renderer.close()
+            try { fd.close() } catch (_: Exception) {}
         }
     }
 
@@ -619,15 +642,27 @@ class IppServer(private val port: Int = 6631) {
 
     // ── HTTP Helpers ─────────────────────────────────────────────────────
 
-    private fun readLine(input: InputStream): String {
+    private fun readLine(input: InputStream, maxLen: Int = 8192): String {
         val sb = StringBuilder()
-        while (true) {
+        while (sb.length < maxLen) {
             val b = input.read()
             if (b == -1 || b == '\n'.code) break
             if (b == '\r'.code) continue
             sb.append(b.toChar())
         }
         return sb.toString()
+    }
+
+    /** Read from input with a size limit (prevents OOM from unbounded readBytes). */
+    private fun readLimited(input: InputStream, maxSize: Int): ByteArray {
+        val buffer = ByteArrayOutputStream()
+        val buf = ByteArray(65536)
+        while (buffer.size() < maxSize) {
+            val n = input.read(buf, 0, minOf(buf.size, maxSize - buffer.size()))
+            if (n <= 0) break
+            buffer.write(buf, 0, n)
+        }
+        return buffer.toByteArray()
     }
 
     private fun readFully(input: InputStream, buf: ByteArray) {

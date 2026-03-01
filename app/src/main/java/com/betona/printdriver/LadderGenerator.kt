@@ -10,6 +10,11 @@ class LadderGenerator(
     val playerCount: Int,
     val stepCount: Int
 ) {
+    init {
+        require(playerCount >= 2) { "playerCount must be >= 2, got $playerCount" }
+        require(stepCount >= 1) { "stepCount must be >= 1, got $stepCount" }
+    }
+
     /**
      * bridges[step][rail] = true means there is a bridge from rail to rail+1 at this step.
      * Array dimensions: [stepCount][playerCount - 1]

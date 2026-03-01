@@ -3,6 +3,7 @@ package com.betona.printdriver.web
 import android.util.Log
 import com.betona.printdriver.DevicePrinter
 import java.io.ByteArrayOutputStream
+import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 
@@ -22,8 +23,9 @@ class RawPrintServer(private val port: Int = 9100) {
         running = true
         listenThread = Thread({
             try {
-                serverSocket = ServerSocket(port).also { ss ->
+                serverSocket = ServerSocket().also { ss ->
                     ss.reuseAddress = true
+                    ss.bind(InetSocketAddress(port))
                     Log.i(TAG, "Listening on port $port")
                     while (running) {
                         try {
@@ -54,19 +56,26 @@ class RawPrintServer(private val port: Int = 9100) {
 
     private fun handleClient(socket: Socket) {
         try {
+            socket.soTimeout = 30_000  // 30s read timeout prevents hung connections
+
             // Ensure printer is open
             if (!DevicePrinter.isOpen) {
                 DevicePrinter.open()
                 DevicePrinter.initPrinter()
             }
 
-            // Buffer entire job to allow post-processing
+            // Buffer entire job to allow post-processing (cap at 10MB to prevent OOM)
+            val maxSize = 10 * 1024 * 1024
             val buffer = ByteArrayOutputStream()
             val buf = ByteArray(65536)
             val input = socket.getInputStream()
             while (true) {
                 val n = input.read(buf)
                 if (n <= 0) break
+                if (buffer.size() + n > maxSize) {
+                    Log.e(TAG, "Job too large (>${maxSize} bytes), aborting")
+                    return
+                }
                 buffer.write(buf, 0, n)
             }
 

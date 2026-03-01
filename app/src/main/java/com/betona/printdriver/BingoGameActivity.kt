@@ -194,7 +194,7 @@ class BingoGameActivity : ComponentActivity() {
             Toast.makeText(context, "전체 카드 인쇄 중... (${gen.playerCount}장)", Toast.LENGTH_SHORT).show()
             Thread {
                 if (!printer.open()) {
-                    runOnUiThread { Toast.makeText(context, "프린터를 열 수 없습니다", Toast.LENGTH_SHORT).show() }
+                    runOnUiThread { if (!isFinishing) Toast.makeText(context, "프린터를 열 수 없습니다", Toast.LENGTH_SHORT).show() }
                     return@Thread
                 }
                 try {
@@ -211,11 +211,11 @@ class BingoGameActivity : ComponentActivity() {
                         printer.write(EscPosCommands.feedDots(160))
                         printer.feedAndCut(fullCut = false)
                     }
-                    runOnUiThread { Toast.makeText(context, "인쇄 완료", Toast.LENGTH_SHORT).show() }
+                    runOnUiThread { if (!isFinishing) Toast.makeText(context, "인쇄 완료", Toast.LENGTH_SHORT).show() }
                     Log.d(TAG, "All cards printed")
                 } catch (e: Exception) {
                     Log.e(TAG, "Print error", e)
-                    runOnUiThread { Toast.makeText(context, "인쇄 오류: ${e.message}", Toast.LENGTH_SHORT).show() }
+                    runOnUiThread { if (!isFinishing) Toast.makeText(context, "인쇄 오류: ${e.message}", Toast.LENGTH_SHORT).show() }
                 }
             }.start()
         }
@@ -225,7 +225,7 @@ class BingoGameActivity : ComponentActivity() {
             Toast.makeText(context, "당첨 카드 인쇄 중...", Toast.LENGTH_SHORT).show()
             Thread {
                 if (!printer.open()) {
-                    runOnUiThread { Toast.makeText(context, "프린터를 열 수 없습니다", Toast.LENGTH_SHORT).show() }
+                    runOnUiThread { if (!isFinishing) Toast.makeText(context, "프린터를 열 수 없습니다", Toast.LENGTH_SHORT).show() }
                     return@Thread
                 }
                 try {
@@ -244,11 +244,11 @@ class BingoGameActivity : ComponentActivity() {
                         printer.write(EscPosCommands.feedDots(160))
                         printer.feedAndCut(fullCut = AppPrefs.isFullCut(this@BingoGameActivity))
                     }
-                    runOnUiThread { Toast.makeText(context, "당첨 카드 인쇄 완료", Toast.LENGTH_SHORT).show() }
+                    runOnUiThread { if (!isFinishing) Toast.makeText(context, "당첨 카드 인쇄 완료", Toast.LENGTH_SHORT).show() }
                     Log.d(TAG, "Winner cards printed")
                 } catch (e: Exception) {
                     Log.e(TAG, "Print error", e)
-                    runOnUiThread { Toast.makeText(context, "인쇄 오류: ${e.message}", Toast.LENGTH_SHORT).show() }
+                    runOnUiThread { if (!isFinishing) Toast.makeText(context, "인쇄 오류: ${e.message}", Toast.LENGTH_SHORT).show() }
                 }
             }.start()
         }
@@ -342,23 +342,23 @@ class BingoGameActivity : ComponentActivity() {
                     onStartGame = { startGame() }
                 )
 
-                Phase.CARDS -> CardsPhase(
+                Phase.CARDS -> generator?.let { gen -> CardsPhase(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding),
-                    generator = generator!!,
+                    generator = gen,
                     font = font,
                     drawnNumbers = drawnNumbersState.toSet(),
                     drawVersion = drawVersion,
                     onPrintAll = { printAllCards() },
                     onStartDraw = { phase = Phase.DRAW }
-                )
+                ) }
 
-                Phase.DRAW -> DrawPhase(
+                Phase.DRAW -> generator?.let { gen -> DrawPhase(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding),
-                    generator = generator!!,
+                    generator = gen,
                     font = font,
                     drawnNumbers = drawnNumbersState.toList(),
                     lastDrawnNumber = lastDrawnNumber,
@@ -374,7 +374,7 @@ class BingoGameActivity : ComponentActivity() {
                         lastDrawnNumber = null
                         drawVersion = 0
                     }
-                )
+                ) }
             }
         }
     }

@@ -92,6 +92,7 @@ object DevicePrinter {
     /**
      * Initialize printer. Combined into single jyPrintString call.
      */
+    @Synchronized
     fun initPrinter(brightness: Int = DEFAULT_BRIGHTNESS) {
         write(EscPosCommands.initialize() + EscPosCommands.setBrightness(brightness))
     }
@@ -101,7 +102,12 @@ object DevicePrinter {
      * Combines raster header with image data, and feed with cut command.
      * Minimizing calls reduces heap corruption from native library bug.
      */
+    @Synchronized
     fun printBitmapAndCut(monoData: ByteArray, widthBytes: Int = PRINT_WIDTH_BYTES, fullCut: Boolean = true) {
+        if (monoData.isEmpty() || widthBytes <= 0) {
+            Log.w(TAG, "printBitmapAndCut: empty data or invalid widthBytes")
+            return
+        }
         val totalHeight = monoData.size / widthBytes
         Log.d(TAG, "printBitmapAndCut: ${widthBytes}x${totalHeight} = ${monoData.size} bytes")
 
@@ -125,7 +131,12 @@ object DevicePrinter {
     /**
      * Print bitmap without cut (for multi-page, cut after last page).
      */
+    @Synchronized
     fun printBitmap(monoData: ByteArray, widthBytes: Int = PRINT_WIDTH_BYTES) {
+        if (monoData.isEmpty() || widthBytes <= 0) {
+            Log.w(TAG, "printBitmap: empty data or invalid widthBytes")
+            return
+        }
         val totalHeight = monoData.size / widthBytes
         Log.d(TAG, "printBitmap: ${widthBytes}x${totalHeight} = ${monoData.size} bytes")
 
@@ -144,6 +155,7 @@ object DevicePrinter {
     /**
      * Feed paper and cut. Combined into single jyPrintString call.
      */
+    @Synchronized
     fun feedAndCut(fullCut: Boolean = true) {
         val cutCmd = if (fullCut) EscPosCommands.fullCut() else EscPosCommands.partialCut()
         writeSync(EscPosCommands.feedLines(4) + cutCmd)
@@ -162,7 +174,7 @@ object DevicePrinter {
 
     // ── Status checks ────────────────────────────────────────────────────
 
-    fun checkPaper(): Int = if (opened) native_.jyPrinter_PaperCheck() else -99
-    fun checkCover(): Int = if (opened) native_.jyPrinter_CoverCheck() else -99
-    fun checkOverheat(): Int = if (opened) native_.jyPrinter_OverheatCheck() else -99
+    @Synchronized fun checkPaper(): Int = if (opened) native_.jyPrinter_PaperCheck() else -99
+    @Synchronized fun checkCover(): Int = if (opened) native_.jyPrinter_CoverCheck() else -99
+    @Synchronized fun checkOverheat(): Int = if (opened) native_.jyPrinter_OverheatCheck() else -99
 }

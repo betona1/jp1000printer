@@ -136,7 +136,7 @@ class LadderGameActivity : ComponentActivity() {
             Toast.makeText(context, "사다리 인쇄 중...", Toast.LENGTH_SHORT).show()
             Thread {
                 if (!printer.open()) {
-                    runOnUiThread { Toast.makeText(context, "프린터를 열 수 없습니다", Toast.LENGTH_SHORT).show() }
+                    runOnUiThread { if (!isFinishing) Toast.makeText(context, "프린터를 열 수 없습니다", Toast.LENGTH_SHORT).show() }
                     return@Thread
                 }
                 try {
@@ -151,11 +151,11 @@ class LadderGameActivity : ComponentActivity() {
                     // ~2cm bottom margin before cut (160 dots at 203 DPI)
                     printer.write(EscPosCommands.feedDots(160))
                     printer.feedAndCut(fullCut = AppPrefs.isFullCut(this@LadderGameActivity))
-                    runOnUiThread { Toast.makeText(context, "사다리 인쇄 완료", Toast.LENGTH_SHORT).show() }
+                    runOnUiThread { if (!isFinishing) Toast.makeText(context, "사다리 인쇄 완료", Toast.LENGTH_SHORT).show() }
                     Log.d(TAG, "Ladder print complete")
                 } catch (e: Exception) {
                     Log.e(TAG, "Print error", e)
-                    runOnUiThread { Toast.makeText(context, "인쇄 오류: ${e.message}", Toast.LENGTH_SHORT).show() }
+                    runOnUiThread { if (!isFinishing) Toast.makeText(context, "인쇄 오류: ${e.message}", Toast.LENGTH_SHORT).show() }
                 }
             }.start()
         }
@@ -165,7 +165,7 @@ class LadderGameActivity : ComponentActivity() {
             Toast.makeText(context, "결과 인쇄 중...", Toast.LENGTH_SHORT).show()
             Thread {
                 if (!printer.open()) {
-                    runOnUiThread { Toast.makeText(context, "프린터를 열 수 없습니다", Toast.LENGTH_SHORT).show() }
+                    runOnUiThread { if (!isFinishing) Toast.makeText(context, "프린터를 열 수 없습니다", Toast.LENGTH_SHORT).show() }
                     return@Thread
                 }
                 try {
@@ -189,11 +189,11 @@ class LadderGameActivity : ComponentActivity() {
                         printer.write(EscPosCommands.feedDots(160))
                         printer.feedAndCut(fullCut = AppPrefs.isFullCut(this@LadderGameActivity))
                     }
-                    runOnUiThread { Toast.makeText(context, "결과 인쇄 완료", Toast.LENGTH_SHORT).show() }
+                    runOnUiThread { if (!isFinishing) Toast.makeText(context, "결과 인쇄 완료", Toast.LENGTH_SHORT).show() }
                     Log.d(TAG, "Results print complete")
                 } catch (e: Exception) {
                     Log.e(TAG, "Print error", e)
-                    runOnUiThread { Toast.makeText(context, "인쇄 오류: ${e.message}", Toast.LENGTH_SHORT).show() }
+                    runOnUiThread { if (!isFinishing) Toast.makeText(context, "인쇄 오류: ${e.message}", Toast.LENGTH_SHORT).show() }
                 }
             }.start()
         }
@@ -378,7 +378,7 @@ class LadderGameActivity : ComponentActivity() {
                                     ladderViewRef = lv
                                     font.let { lv.setFont(it) }
                                     lv.onPathComplete = { startRail, endRail ->
-                                        runOnUiThread {
+                                        runOnUiThread { if (!isFinishing) {
                                             lv.revealResult(endRail)
                                             val names = getNames()
                                             val results = getResults()
@@ -386,7 +386,7 @@ class LadderGameActivity : ComponentActivity() {
                                             val result = results.getOrElse(endRail) { "?" }
                                             resultText = "$name → $result"
                                             showResult = true
-                                        }
+                                        } }
                                     }
                                     // If generator already set, apply it
                                     generator?.let { gen ->

@@ -169,12 +169,16 @@ class WebPrintActivity : AppCompatActivity() {
             @JavascriptInterface
             fun printHtml(html: String) {
                 Log.d(TAG, "printHtml called, html length=${html.length}")
-                runOnUiThread { loadAndPrintHtml(html) }
+                runOnUiThread {
+                    if (!isFinishing && !isDestroyed) loadAndPrintHtml(html)
+                }
             }
 
             @JavascriptInterface
             fun print() {
-                runOnUiThread { printPage() }
+                runOnUiThread {
+                    if (!isFinishing && !isDestroyed) printPage()
+                }
             }
         }, "NativeBridge")
 
@@ -385,6 +389,7 @@ class WebPrintActivity : AppCompatActivity() {
 
     /** Manual screen off — confirm then turn off screen */
     private fun confirmScreenOff() {
+        if (isFinishing || isDestroyed) return
         AlertDialog.Builder(this)
             .setTitle("화면 끄기")
             .setMessage("화면을 끄시겠습니까?\n(터치하면 다시 켜집니다)")
@@ -441,6 +446,7 @@ class WebPrintActivity : AppCompatActivity() {
     }
 
     private fun showScreenOffCountdown() {
+        if (isFinishing || isDestroyed) return
         var secondsLeft = 60
         val dialog = AlertDialog.Builder(this)
             .setTitle("화면 꺼짐 예정")
@@ -491,6 +497,7 @@ class WebPrintActivity : AppCompatActivity() {
     }
 
     private fun showNoWifiWarning(schoolUrl: String) {
+        if (isFinishing || isDestroyed) return
         AlertDialog.Builder(this)
             .setTitle("네트워크 오류")
             .setMessage("와이파이 인터넷을 확인하세요")
@@ -588,6 +595,7 @@ class WebPrintActivity : AppCompatActivity() {
         clockHandler.removeCallbacks(clockRunnable)
         inactivityHandler.removeCallbacks(inactivityRunnable)
         destroyPrintWebView()
+        try { webView.destroy() } catch (_: Exception) {}
         super.onDestroy()
     }
 }

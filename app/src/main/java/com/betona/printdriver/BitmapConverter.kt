@@ -208,10 +208,11 @@ object BitmapConverter {
     fun scaleToWidth(bitmap: Bitmap, targetWidth: Int): Bitmap {
         if (bitmap.width == targetWidth) return bitmap
         val ratio = targetWidth.toFloat() / bitmap.width
-        val newHeight = (bitmap.height * ratio).toInt()
+        val newHeight = maxOf(1, (bitmap.height * ratio).toInt())
         return Bitmap.createScaledBitmap(bitmap, targetWidth, newHeight, true)
     }
 
+    @Volatile
     private var cachedFont: Typeface? = null
 
     private fun loadKoreanFont(context: Context): Typeface {

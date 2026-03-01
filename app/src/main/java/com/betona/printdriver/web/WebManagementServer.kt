@@ -48,6 +48,10 @@ class WebManagementServer(
         }
         if (uri.startsWith("/web/")) {
             val assetPath = uri.removePrefix("/")
+            // Block path traversal attempts
+            if (assetPath.contains("..")) {
+                return newFixedLengthResponse(Response.Status.FORBIDDEN, MIME_PLAINTEXT, "Forbidden")
+            }
             val mime = when {
                 uri.endsWith(".css") -> "text/css"
                 uri.endsWith(".js") -> "application/javascript"

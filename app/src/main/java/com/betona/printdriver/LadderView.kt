@@ -117,6 +117,11 @@ class LadderView @JvmOverloads constructor(
         style = Paint.Style.STROKE
     }
 
+    private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.RED
+        style = Paint.Style.FILL
+    }
+
     private val bottomNumberPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.GRAY
         textSize = 20f
@@ -211,6 +216,12 @@ class LadderView @JvmOverloads constructor(
     private fun getLadderBottom(): Float {
         val gen = generator ?: return 0f
         return getStepY(gen.stepCount)
+    }
+
+    override fun onDetachedFromWindow() {
+        animator?.cancel()
+        animator = null
+        super.onDetachedFromWindow()
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
@@ -363,10 +374,6 @@ class LadderView @JvmOverloads constructor(
                 drawPath.lineTo(interpX, interpY)
 
                 // Draw current position dot
-                val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = Color.RED
-                    style = Paint.Style.FILL
-                }
                 canvas.drawCircle(interpX, interpY, 8f, dotPaint)
             }
         }
@@ -413,13 +420,15 @@ class LadderView @JvmOverloads constructor(
         animPath = gen.tracePath(rail)
         animProgress = 0f
 
+        var pathCompleted = false
         animator = ValueAnimator.ofFloat(0f, 1f).apply {
             duration = 1500L
             interpolator = LinearInterpolator()
             addUpdateListener { animation ->
                 animProgress = animation.animatedValue as Float
                 invalidate()
-                if (animProgress >= 1f) {
+                if (animProgress >= 1f && !pathCompleted) {
+                    pathCompleted = true
                     onPathComplete?.invoke(rail, gen.getDestination(rail))
                 }
             }
@@ -435,8 +444,9 @@ class LadderView @JvmOverloads constructor(
     fun toBitmap(includeResults: Boolean = true, printWidth: Int = DevicePrinter.PRINT_WIDTH_PX): Bitmap {
         val gen = generator ?: return Bitmap.createBitmap(printWidth, 100, Bitmap.Config.ARGB_8888)
 
-        // Render at a size proportional to print width
-        val scale = printWidth.toFloat() / width.coerceAtLeast(1)
+        // Render at a size proportional to print width (guard width=0)
+        val viewWidth = if (width > 0) width else printWidth
+        val scale = printWidth.toFloat() / viewWidth
         val stepH = getStepHeight(gen) * scale
         val topM = topMargin * scale
         val bottomM = bottomMargin * scale
