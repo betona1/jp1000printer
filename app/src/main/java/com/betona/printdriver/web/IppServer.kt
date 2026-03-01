@@ -2,6 +2,7 @@ package com.betona.printdriver.web
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
 import android.net.nsd.NsdManager
@@ -204,21 +205,34 @@ class IppServer(private val port: Int = 6631) {
         out.writeNaturalLanguage("natural-language-configured", "en")
         out.writeNaturalLanguage("generated-natural-language-supported", "en")
 
-        // Media — 80mm thermal paper, matching Windows RAW driver settings
-        // Android BIPS parses: custom_<name>_<width>x<height><unit>
-        out.writeKeyword("media-supported", "custom_thermal_80x150mm")
-        out.writeKeywordValue("custom_thermal_80x200mm")
-        out.writeKeywordValue("custom_thermal_80x297mm")
-        out.writeKeyword("media-default", "custom_thermal_80x150mm")
-        out.writeKeyword("media-ready", "custom_thermal_80x150mm")
+        // Media — 72mm thermal roll paper (576px at 203 DPI)
+        // Dimensions in hundredths of mm: 72mm=7200, 150mm=15000, etc.
+        val W = 7200  // 72mm width
+        val heights = intArrayOf(15000, 20000, 29700) // 150, 200, 297mm
 
-        // media-size-supported — exact dimensions in hundredths of mm
-        // (Windows and Android use this for precise paper size)
-        out.writeMediaSize("media-size-supported", 8000, 15000)
-        out.writeMediaSizeValue(8000, 20000)
-        out.writeMediaSizeValue(8000, 29700)
+        out.writeKeyword("media-supported", "custom_roll_72x150mm")
+        out.writeKeywordValue("custom_roll_72x200mm")
+        out.writeKeywordValue("custom_roll_72x297mm")
+        out.writeKeyword("media-default", "custom_roll_72x150mm")
+        out.writeKeyword("media-ready", "custom_roll_72x150mm")
 
+        // media-size-supported — exact dimensions for Windows/Android
+        out.writeMediaSize("media-size-supported", W, heights[0])
+        for (h in heights.drop(1)) out.writeMediaSizeValue(W, h)
+
+        // media-col-database — full collection Android BIPS reads first
         out.writeKeyword("media-col-supported", "media-size")
+        out.writeKeywordValue("media-left-margin")
+        out.writeKeywordValue("media-right-margin")
+        out.writeKeywordValue("media-top-margin")
+        out.writeKeywordValue("media-bottom-margin")
+        for ((idx, h) in heights.withIndex()) {
+            if (idx == 0) out.writeMediaColEntry("media-col-database", W, h)
+            else out.writeMediaColEntryValue(W, h)
+        }
+
+        // media-col-default — default 72x150mm, 0 margins
+        out.writeMediaColEntry("media-col-default", W, heights[0])
 
         // Color
         out.writeKeyword("print-color-mode-supported", "monochrome")
@@ -297,29 +311,84 @@ class IppServer(private val port: Int = 6631) {
                 DevicePrinter.initPrinter()
             }
 
+            val pw = DevicePrinter.PRINT_WIDTH_PX // 576
             val pageCount = renderer.pageCount
             Log.i(TAG, "Rendering $pageCount page(s)")
 
             for (i in 0 until pageCount) {
                 val page = renderer.openPage(i)
-                val renderWidth = DevicePrinter.PRINT_WIDTH_PX
+
+                // Render at 3x printer width for high resolution
+                val renderWidth = pw * 3 // 1728px
                 val renderHeight = maxOf(1, (renderWidth.toDouble() * page.height / page.width).toInt())
 
-                val bitmap = Bitmap.createBitmap(renderWidth, renderHeight, Bitmap.Config.ARGB_8888)
+                var bitmap = Bitmap.createBitmap(renderWidth, renderHeight, Bitmap.Config.ARGB_8888)
                 bitmap.eraseColor(Color.WHITE)
                 page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
                 page.close()
 
-                val mono = BitmapConverter.toMonochrome(bitmap)
-                val trimmed = BitmapConverter.trimTrailingWhiteRows(mono)
-                bitmap.recycle()
+                // Crop white margins
+                val cropped = BitmapConverter.cropWhiteBorders(bitmap)
+                if (cropped !== bitmap) bitmap.recycle()
 
-                if (i == pageCount - 1) {
-                    DevicePrinter.printBitmapAndCut(trimmed)
+                val cw = cropped.width
+                val ch = cropped.height
+                val isLastPage = (i == pageCount - 1)
+
+                // Threshold: if content width > 1.5x printer width, it's wide
+                // content (e.g. A4 독서로) — split into vertical strips
+                if (cw > pw * 1.5) {
+                    // Strip-splitting mode: slice into pw-wide vertical strips
+                    val stripCount = (cw + pw - 1) / pw
+                    Log.i(TAG, "Page ${i + 1}: wide content ${cw}x${ch}, splitting into $stripCount strips")
+
+                    for (s in 0 until stripCount) {
+                        val srcX = s * pw
+                        val srcW = minOf(pw, cw - srcX)
+
+                        // Create strip bitmap at printer width
+                        val stripH = ch
+                        val strip = Bitmap.createBitmap(pw, stripH, Bitmap.Config.ARGB_8888)
+                        strip.eraseColor(Color.WHITE)
+                        val canvas = Canvas(strip)
+
+                        // Copy the slice from cropped bitmap
+                        val srcSlice = Bitmap.createBitmap(cropped, srcX, 0, srcW, ch)
+                        canvas.drawBitmap(srcSlice, 0f, 0f, null)
+                        srcSlice.recycle()
+
+                        val mono = BitmapConverter.toMonochrome(strip)
+                        val trimmed = BitmapConverter.trimTrailingWhiteRows(mono)
+                        strip.recycle()
+
+                        val isLastStrip = (s == stripCount - 1)
+                        if (isLastPage && isLastStrip) {
+                            DevicePrinter.printBitmapAndCut(trimmed)
+                        } else {
+                            DevicePrinter.printBitmap(trimmed)
+                            DevicePrinter.feedAndCut()
+                        }
+                        Log.i(TAG, "  Strip ${s + 1}/$stripCount: ${trimmed.size} bytes")
+                    }
                 } else {
-                    DevicePrinter.printBitmap(trimmed)
+                    // Narrow content — scale to fill printer width (original behavior)
+                    val scaled = BitmapConverter.scaleToWidth(cropped, pw)
+                    if (scaled !== cropped) cropped.recycle()
+
+                    val mono = BitmapConverter.toMonochrome(scaled)
+                    val trimmed = BitmapConverter.trimTrailingWhiteRows(mono)
+                    scaled.recycle()
+
+                    if (isLastPage) {
+                        DevicePrinter.printBitmapAndCut(trimmed)
+                    } else {
+                        DevicePrinter.printBitmap(trimmed)
+                    }
+                    Log.i(TAG, "Page ${i + 1}/$pageCount: ${trimmed.size} bytes")
                 }
-                Log.i(TAG, "Page ${i + 1}/$pageCount: ${trimmed.size} bytes")
+
+                // Recycle cropped if still alive (wide path doesn't recycle it above)
+                if (!cropped.isRecycled) cropped.recycle()
             }
         } finally {
             renderer.close()
@@ -551,6 +620,48 @@ class IppServer(private val port: Int = 6631) {
         writeMemberInteger(widthHmm)
         writeMemberName("y-dimension")
         writeMemberInteger(heightHmm)
+        writeEndCollection()
+    }
+
+    /** Write a media-col entry: { media-size { x, y }, margins = 0 } */
+    private fun ByteArrayOutputStream.writeMediaColEntry(name: String, widthHmm: Int, heightHmm: Int) {
+        writeBeginCollection(name)
+        writeMemberName("media-size")
+        writeBeginCollectionValue() // nested collection
+        writeMemberName("x-dimension")
+        writeMemberInteger(widthHmm)
+        writeMemberName("y-dimension")
+        writeMemberInteger(heightHmm)
+        writeEndCollection() // end media-size
+        writeMemberName("media-left-margin")
+        writeMemberInteger(0)
+        writeMemberName("media-right-margin")
+        writeMemberInteger(0)
+        writeMemberName("media-top-margin")
+        writeMemberInteger(0)
+        writeMemberName("media-bottom-margin")
+        writeMemberInteger(0)
+        writeEndCollection() // end media-col entry
+    }
+
+    /** Additional media-col entry (same attribute) */
+    private fun ByteArrayOutputStream.writeMediaColEntryValue(widthHmm: Int, heightHmm: Int) {
+        writeBeginCollectionValue()
+        writeMemberName("media-size")
+        writeBeginCollectionValue()
+        writeMemberName("x-dimension")
+        writeMemberInteger(widthHmm)
+        writeMemberName("y-dimension")
+        writeMemberInteger(heightHmm)
+        writeEndCollection()
+        writeMemberName("media-left-margin")
+        writeMemberInteger(0)
+        writeMemberName("media-right-margin")
+        writeMemberInteger(0)
+        writeMemberName("media-top-margin")
+        writeMemberInteger(0)
+        writeMemberName("media-bottom-margin")
+        writeMemberInteger(0)
         writeEndCollection()
     }
 
