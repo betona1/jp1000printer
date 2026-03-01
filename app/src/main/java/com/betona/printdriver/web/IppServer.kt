@@ -15,6 +15,7 @@ import java.net.Inet4Address
 import java.net.NetworkInterface
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.UUID
 
 /**
  * IPP (Internet Printing Protocol) server on port 631.
@@ -33,6 +34,11 @@ class IppServer(private val port: Int = 631) {
     private var nsdManager: NsdManager? = null
     private var registrationListener: NsdManager.RegistrationListener? = null
     private var jobIdCounter = 1000
+
+    // Stable UUID derived from package name (consistent across reboots)
+    private val printerUuid: String = UUID.nameUUIDFromBytes(
+        "LibroPrinter-JY-P1000".toByteArray()
+    ).toString()
 
     // ── Lifecycle ────────────────────────────────────────────────────────
 
@@ -169,6 +175,8 @@ class IppServer(private val port: Int = 631) {
         out.writeName("printer-name", "LibroPrinter")
         out.writeText("printer-info", "LibroPrinter Thermal Receipt Printer")
         out.writeText("printer-make-and-model", "LibroPrinter Thermal")
+        out.writeUri("printer-more-info", "http://$ip:8080")
+        out.writeUri("printer-uuid", "urn:uuid:$printerUuid")
         out.writeEnum("printer-state", 3) // idle
         out.writeKeyword("printer-state-reasons", "none")
 
@@ -548,6 +556,9 @@ class IppServer(private val port: Int = 631) {
                 setAttribute("pdl", "application/pdf")
                 setAttribute("rp", "ipp/print")
                 setAttribute("ty", "LibroPrinter")
+                setAttribute("UUID", printerUuid)
+                setAttribute("product", "(LibroPrinter Thermal)")
+                setAttribute("note", "Thermal Receipt Printer")
             }
 
             val listener = object : NsdManager.RegistrationListener {
