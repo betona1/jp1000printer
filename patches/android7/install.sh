@@ -51,7 +51,19 @@ echo "USB 경로: $USB_DIR"
 
 # 파일 확인
 MISSING=0
-for f in app-a40-debug.apk chrome113.apk configure_print.sh printdriver.rc config_webview_packages_patched.bin; do
+
+# 앱 APK 찾기 (debug 또는 release)
+APP_APK=""
+if [ -f "$USB_DIR/app-a40-debug.apk" ]; then
+    APP_APK="$USB_DIR/app-a40-debug.apk"
+elif [ -f "$USB_DIR/app-a40-release.apk" ]; then
+    APP_APK="$USB_DIR/app-a40-release.apk"
+else
+    echo "ERROR: 앱 APK 없음 (app-a40-debug.apk 또는 app-a40-release.apk)"
+    MISSING=1
+fi
+
+for f in chrome113.apk configure_print.sh printdriver.rc config_webview_packages_patched.bin; do
     if [ ! -f "$USB_DIR/$f" ]; then
         echo "ERROR: 파일 없음 - $f"
         MISSING=1
@@ -69,8 +81,8 @@ echo ""
 
 # ── Step 1: 앱 설치 ──────────────────────────────────────────────────────
 
-echo "[1/6] 앱 설치..."
-pm install -r "$USB_DIR/app-a40-debug.apk"
+echo "[1/6] 앱 설치... ($APP_APK)"
+pm install -r "$APP_APK"
 if [ $? -eq 0 ]; then
     echo "  OK"
 else
