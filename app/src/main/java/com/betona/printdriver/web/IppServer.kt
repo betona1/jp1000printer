@@ -359,7 +359,15 @@ class IppServer(private val port: Int = 6631) {
                     }
                 }
             } finally {
-                renderer.close()
+                // Android 7 (API 24-25) libpdfium.so has a bug in FPDF_CloseDocument
+                // that causes SIGABRT "Invalid address passed to free: value not allocated"
+                // Skip renderer.close() on API < 26 to avoid native crash.
+                // The fd.close() below will release the underlying file resources.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    renderer.close()
+                } else {
+                    Log.w(TAG, "Skipping PdfRenderer.close() on API ${Build.VERSION.SDK_INT} to avoid libpdfium crash")
+                }
             }
         } finally {
             try { fd.close() } catch (_: Exception) {}
