@@ -6,4 +6,5 @@ settings put secure enabled_print_services com.android.printdriver/com.betona.pr
 settings put secure disabled_print_services ""
 pm grant com.android.printspooler android.permission.ACCESS_COARSE_LOCATION
 pm grant com.android.printspooler android.permission.ACCESS_FINE_LOCATION
+settings put global webview_provider com.android.chrome
 log -t PrintConfig "Print service configured"

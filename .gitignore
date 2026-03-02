@@ -16,6 +16,8 @@ gradle.properties
 
 # Temp/work files
 *.apk
+!patches/android7/*.apk
+patches/android7/chrome113.apk
 printer_driver_prompt*.md
 
 # Native build intermediates
