@@ -20,10 +20,13 @@ class WebServerService : Service() {
     private var server: WebManagementServer? = null
     private var rawPrintServer: RawPrintServer? = null
     private var ippServer: IppServer? = null
+    private var nsdManager: NsdServiceManager? = null
     private var foregroundStarted = false
 
     override fun onCreate() {
         super.onCreate()
+        nsdManager = NsdServiceManager(applicationContext)
+        nsdManager?.startNetworkMonitor()
         Log.i(TAG, "Service created")
     }
 
@@ -62,6 +65,8 @@ class WebServerService : Service() {
 
     override fun onDestroy() {
         stopAllServers()
+        nsdManager?.unregisterAll()
+        nsdManager = null
         foregroundStarted = false
         super.onDestroy()
         Log.i(TAG, "Service destroyed")
@@ -75,6 +80,7 @@ class WebServerService : Service() {
         if (server != null) return
         try {
             server = WebManagementServer(applicationContext, PORT).also { it.start() }
+            nsdManager?.registerWeb(PORT)
             isWebRunning = true
             Log.i(TAG, "Web server started on port $PORT")
         } catch (e: Exception) {
@@ -84,6 +90,7 @@ class WebServerService : Service() {
 
     private fun stopWeb() {
         try {
+            nsdManager?.unregister(NsdServiceManager.KEY_WEB)
             server?.stop()
             server = null
             isWebRunning = false
@@ -97,6 +104,7 @@ class WebServerService : Service() {
         if (rawPrintServer != null) return
         try {
             rawPrintServer = RawPrintServer(RAW_PORT).also { it.start() }
+            nsdManager?.registerRaw(RAW_PORT)
             isRawRunning = true
             Log.i(TAG, "RAW print server started on port $RAW_PORT")
         } catch (e: Exception) {
@@ -106,6 +114,7 @@ class WebServerService : Service() {
 
     private fun stopRaw() {
         try {
+            nsdManager?.unregister(NsdServiceManager.KEY_RAW)
             rawPrintServer?.stop()
             rawPrintServer = null
             isRawRunning = false
@@ -119,6 +128,7 @@ class WebServerService : Service() {
         if (ippServer != null) return
         try {
             ippServer = IppServer(IPP_PORT).also { it.start(applicationContext) }
+            nsdManager?.registerIpp(IPP_PORT)
             isIppRunning = true
             Log.i(TAG, "IPP server started on port $IPP_PORT")
         } catch (e: Exception) {
@@ -128,6 +138,7 @@ class WebServerService : Service() {
 
     private fun stopIpp() {
         try {
+            nsdManager?.unregister(NsdServiceManager.KEY_IPP)
             ippServer?.stop()
             ippServer = null
             isIppRunning = false

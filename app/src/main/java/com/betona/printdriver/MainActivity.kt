@@ -19,6 +19,7 @@ import android.print.PrintDocumentInfo
 import android.print.PrintManager
 import android.net.Uri
 import android.content.pm.ActivityInfo
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Environment
 import android.provider.Settings
@@ -711,6 +712,18 @@ class MainActivity : ComponentActivity() {
         val canRead = exists && devFile.canRead()
         val canWrite = exists && devFile.canWrite()
 
+        val spoolerInstalled = remember {
+            try {
+                val info = packageManager.getApplicationInfo("com.android.printspooler", 0)
+                info.enabled
+            } catch (_: PackageManager.NameNotFoundException) { false }
+        }
+
+        val printServiceEnabled = remember {
+            val enabled = Settings.Secure.getString(contentResolver, "enabled_print_services") ?: ""
+            enabled.contains("LibroPrintService")
+        }
+
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
@@ -731,6 +744,37 @@ class MainActivity : ComponentActivity() {
                 StatusRow("장치 존재", if (exists) "YES" else "NO", exists)
                 StatusRow("읽기 가능", if (canRead) "YES" else "NO", canRead)
                 StatusRow("쓰기 가능", if (canWrite) "YES" else "NO", canWrite)
+                Spacer(Modifier.height(4.dp))
+                StatusRow("PrintSpooler", if (spoolerInstalled) "설치됨" else "미설치", spoolerInstalled)
+                StatusRow("인쇄 드라이버", if (printServiceEnabled) "활성화" else "비활성화", printServiceEnabled)
+
+                if (!spoolerInstalled) {
+                    Spacer(Modifier.height(8.dp))
+                    FilledTonalButton(
+                        onClick = { installPrintSpooler() },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) { Text("PrintSpooler 설치") }
+                }
+
+                if (!printServiceEnabled) {
+                    Spacer(Modifier.height(8.dp))
+                    FilledTonalButton(
+                        onClick = { forceEnablePrintService() },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) { Text("인쇄 드라이버 활성화") }
+                }
+
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { testSystemPrint() },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("시스템 인쇄 테스트 (PrintSpooler)") }
             }
         }
     }
@@ -1357,9 +1401,6 @@ class MainActivity : ComponentActivity() {
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text("기타", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                FilledTonalButton(onClick = { testSystemPrint() }, modifier = Modifier.fillMaxWidth()) {
-                    Text("시스템 인쇄 테스트 (PrintSpooler)")
-                }
                 FilledTonalButton(
                     onClick = { startActivity(Intent(this@MainActivity, LadderGameActivity::class.java)) },
                     modifier = Modifier.fillMaxWidth()
@@ -1664,18 +1705,19 @@ class MainActivity : ComponentActivity() {
             ) {
                 try {
                     val pdfDoc = PdfDocument()
-                    val pageInfo = PdfDocument.PageInfo.Builder(576, 400, 0).create()
+                    val pageInfo = PdfDocument.PageInfo.Builder(204, 300, 0).create()
                     val page = pdfDoc.startPage(pageInfo)
                     val canvas = page.canvas
-                    val paint = Paint().apply { color = AColor.BLACK; textSize = 24f }
-                    canvas.drawText("시스템 인쇄 테스트", 20f, 50f, paint)
-                    canvas.drawText("PrintSpooler → PrintService", 20f, 90f, paint)
-                    canvas.drawText("LibroPrintDriver", 20f, 130f, paint)
-                    paint.textSize = 16f
+                    val paint = Paint().apply { color = AColor.BLACK; textSize = 10f; isAntiAlias = true }
+                    canvas.drawText("시스템 인쇄 테스트", 10f, 20f, paint)
+                    paint.textSize = 8f
+                    canvas.drawText("PrintSpooler → PrintService", 10f, 35f, paint)
+                    canvas.drawText("LibroPrintDriver", 10f, 48f, paint)
+                    paint.textSize = 7f
                     val time = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.KOREA).format(Date())
-                    canvas.drawText(time, 20f, 170f, paint)
-                    paint.style = Paint.Style.STROKE; paint.strokeWidth = 2f
-                    canvas.drawRect(10f, 10f, 566f, 390f, paint)
+                    canvas.drawText(time, 10f, 62f, paint)
+                    paint.style = Paint.Style.STROKE; paint.strokeWidth = 1f
+                    canvas.drawRect(4f, 4f, 200f, 296f, paint)
                     pdfDoc.finishPage(page)
                     pdfDoc.writeTo(FileOutputStream(destination.fileDescriptor))
                     pdfDoc.close()
@@ -1683,9 +1725,14 @@ class MainActivity : ComponentActivity() {
                 } catch (e: Exception) {
                     Log.e(TAG, "SystemPrint: onWrite error", e)
                     callback.onWriteFailed(e.message)
+                } finally {
+                    try { destination.close() } catch (_: Exception) {}
                 }
             }
-        }, null)
+        }, PrintAttributes.Builder()
+            .setMediaSize(PrintAttributes.MediaSize("72mm", "72mm receipt", 2835, 4252))
+            .setResolution(PrintAttributes.Resolution("default", "default", 203, 203))
+            .build())
     }
 
     // ── APK Install ────────────────────────────────────────────────────────
@@ -1726,18 +1773,42 @@ class MainActivity : ComponentActivity() {
 
     // ── Print Service ─────────────────────────────────────────────────────
 
+    private fun runShellCommand(cmd: String): Pair<Int, String> {
+        val p = Runtime.getRuntime().exec(arrayOf("sh"))
+        p.outputStream.bufferedWriter().use { it.write("$cmd\n") }
+        val stdout = p.inputStream.bufferedReader().readText().trim()
+        val stderr = p.errorStream.bufferedReader().readText().trim()
+        val exit = p.waitFor()
+        val output = listOf(stdout, stderr).filter { it.isNotEmpty() }.joinToString(" ")
+        return exit to output
+    }
+
+    private fun installPrintSpooler() {
+        // PrintSpooler 시스템 앱 상세 설정 화면으로 이동 → 사용자가 활성화
+        try {
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+            intent.data = Uri.parse("package:com.android.printspooler")
+            startActivity(intent)
+            Toast.makeText(this, "PrintSpooler를 활성화해주세요", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to open PrintSpooler settings", e)
+            Toast.makeText(this, "설정 열기 실패. adb shell pm enable --user 0 com.android.printspooler", Toast.LENGTH_LONG).show()
+        }
+    }
+
     private fun forceEnablePrintService() {
         Thread {
             try {
                 val component = "${packageName}/com.betona.printdriver.LibroPrintService"
-                val p = Runtime.getRuntime().exec(arrayOf(
-                    "sh", "-c", "settings put secure enabled_print_services $component"
-                ))
-                p.waitFor()
+                val (exit, output) = runShellCommand("settings put secure enabled_print_services $component")
+                Log.d(TAG, "PrintService force-enable: exit=$exit output=$output component=$component")
                 runOnUiThread {
-                    Toast.makeText(this, "인쇄 서비스 활성화 완료", Toast.LENGTH_SHORT).show()
+                    if (exit == 0) {
+                        Toast.makeText(this, "인쇄 서비스 활성화 완료", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this, "활성화 실패: $output", Toast.LENGTH_SHORT).show()
+                    }
                 }
-                Log.d(TAG, "PrintService force-enabled: $component")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to enable PrintService", e)
                 runOnUiThread {

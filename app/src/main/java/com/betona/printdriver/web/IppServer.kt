@@ -4,8 +4,6 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
-import android.net.nsd.NsdManager
-import android.net.nsd.NsdServiceInfo
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.provider.Settings
@@ -35,8 +33,6 @@ class IppServer(private val port: Int = 6631) {
     private var listenThread: Thread? = null
     @Volatile private var running = false
 
-    private var nsdManager: NsdManager? = null
-    private var registrationListener: NsdManager.RegistrationListener? = null
     private var jobIdCounter = 1000
 
     // Per-device UUID and name (set in start() from device serial/ID)
@@ -80,12 +76,12 @@ class IppServer(private val port: Int = 6631) {
             }
         }, "ipp-server")
         listenThread!!.start()
-        registerMdns(context)
+        // mDNS 등록은 NsdServiceManager에서 담당
     }
 
     fun stop() {
         running = false
-        unregisterMdns()
+        // mDNS 해제는 NsdServiceManager에서 담당
         try { serverSocket?.close() } catch (_: Exception) {}
         serverSocket = null
         listenThread = null
@@ -709,59 +705,6 @@ class IppServer(private val port: Int = 6631) {
             Log.e(TAG, "Failed to get local IP", e)
         }
         return "127.0.0.1"
-    }
-
-    // ── mDNS Registration ────────────────────────────────────────────────
-
-    private fun registerMdns(context: Context) {
-        try {
-            val serviceInfo = NsdServiceInfo().apply {
-                serviceName = printerName
-                serviceType = "_ipp._tcp"
-                port = this@IppServer.port
-                setAttribute("txtvers", "1")
-                setAttribute("pdl", "application/pdf")
-                setAttribute("rp", "ipp/print")
-                setAttribute("ty", printerName)
-                setAttribute("UUID", printerUuid)
-                setAttribute("product", "(LibroPrinter Thermal)")
-                setAttribute("note", "Thermal Receipt Printer")
-            }
-
-            val listener = object : NsdManager.RegistrationListener {
-                override fun onRegistrationFailed(si: NsdServiceInfo, err: Int) {
-                    Log.e(TAG, "mDNS registration failed: $err")
-                }
-                override fun onUnregistrationFailed(si: NsdServiceInfo, err: Int) {
-                    Log.e(TAG, "mDNS unregistration failed: $err")
-                }
-                override fun onServiceRegistered(si: NsdServiceInfo) {
-                    Log.i(TAG, "mDNS registered: ${si.serviceName}")
-                }
-                override fun onServiceUnregistered(si: NsdServiceInfo) {
-                    Log.i(TAG, "mDNS unregistered")
-                }
-            }
-            registrationListener = listener
-
-            nsdManager = (context.getSystemService(Context.NSD_SERVICE) as NsdManager).also {
-                it.registerService(serviceInfo, NsdManager.PROTOCOL_DNS_SD, listener)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "mDNS registration error", e)
-        }
-    }
-
-    private fun unregisterMdns() {
-        registrationListener?.let { listener ->
-            try {
-                nsdManager?.unregisterService(listener)
-            } catch (e: Exception) {
-                Log.e(TAG, "mDNS unregister error", e)
-            }
-        }
-        registrationListener = null
-        nsdManager = null
     }
 
     companion object {
