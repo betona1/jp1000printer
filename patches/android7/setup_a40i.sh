@@ -1,16 +1,15 @@
 #!/bin/bash
 # ============================================================================
-# A40i (Android 7) 자동 설치 스크립트
+# A40i (Android 7) 자동 설치 스크립트 (Portable)
 # ============================================================================
 # 새 A40i 기기에 LibroPrintDriver 전체 환경을 한 번에 설치합니다.
 #
 # 사전 요구사항:
-#   - ADB가 PATH에 있거나 ANDROID_HOME이 설정되어 있을 것
 #   - A40i 기기가 USB로 연결되어 있을 것
-#   - 이 스크립트가 patches/android7/ 디렉토리에서 실행될 것
+#   - Python 3 설치 (framework-res 패치용)
+#   - ADB는 이 폴더에 포함되어 있거나 PATH에 있을 것
 #
 # 사용법:
-#   cd patches/android7
 #   bash setup_a40i.sh                    # 기기가 1대만 연결된 경우
 #   bash setup_a40i.sh -s 20080411        # 시리얼 지정
 #   bash setup_a40i.sh -t 4              # transport_id 지정
@@ -21,18 +20,40 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# ── ADB 경로 설정 ──────────────────────────────────────────────────────────
+# ── ADB 경로 설정 (같은 폴더의 adb.exe 우선) ────────────────────────────────
 
-if command -v adb &>/dev/null; then
+if [ -f "$SCRIPT_DIR/adb.exe" ]; then
+    ADB="$SCRIPT_DIR/adb.exe"
+elif [ -f "$SCRIPT_DIR/adb" ]; then
+    ADB="$SCRIPT_DIR/adb"
+elif command -v adb &>/dev/null; then
     ADB=adb
 elif [ -f "$ANDROID_HOME/platform-tools/adb" ]; then
     ADB="$ANDROID_HOME/platform-tools/adb"
 elif [ -f "$LOCALAPPDATA/Android/Sdk/platform-tools/adb.exe" ]; then
     ADB="$LOCALAPPDATA/Android/Sdk/platform-tools/adb.exe"
 else
-    echo "ERROR: adb를 찾을 수 없습니다. PATH에 추가하거나 ANDROID_HOME을 설정하세요."
+    echo "ERROR: adb를 찾을 수 없습니다."
+    echo "  이 폴더에 adb.exe를 넣거나 PATH에 추가하세요."
     exit 1
 fi
+
+# ── Python 경로 설정 ─────────────────────────────────────────────────────────
+
+if command -v python3 &>/dev/null; then
+    PYTHON=python3
+elif command -v python &>/dev/null; then
+    PYTHON=python
+else
+    echo "ERROR: Python을 찾을 수 없습니다. Python 3을 설치하세요."
+    exit 1
+fi
+
+# ── 임시 디렉토리 (Windows 호환) ─────────────────────────────────────────────
+
+# Windows 경로의 백슬래시를 슬래시로 변환
+TMPDIR="${TEMP:-${TMP:-/tmp}}"
+TMPDIR="${TMPDIR//\\//}"
 
 # ── 인자 파싱 ───────────────────────────────────────────────────────────────
 
@@ -55,6 +76,9 @@ echo "============================================"
 echo "  A40i (Android 7) 자동 설치 스크립트"
 echo "============================================"
 echo ""
+echo "  ADB:    $ADB"
+echo "  Python: $($PYTHON --version 2>&1)"
+echo ""
 
 REQUIRED_FILES=(
     "configure_print.sh"
@@ -64,16 +88,17 @@ REQUIRED_FILES=(
     "chrome113.apk"
 )
 
-# app APK: 빌드된 것 또는 릴리즈 APK 사용
+# app APK: 릴리즈 → 디버그 순으로 찾기
 APP_APK=""
-if [ -f "../../app/build/outputs/apk/a40/debug/app-a40-debug.apk" ]; then
-    APP_APK="../../app/build/outputs/apk/a40/debug/app-a40-debug.apk"
-elif [ -f "app-a40-release.apk" ]; then
+if [ -f "app-a40-release.apk" ]; then
     APP_APK="app-a40-release.apk"
+elif [ -f "app-a40-debug.apk" ]; then
+    APP_APK="app-a40-debug.apk"
+elif [ -f "../../app/build/outputs/apk/a40/debug/app-a40-debug.apk" ]; then
+    APP_APK="../../app/build/outputs/apk/a40/debug/app-a40-debug.apk"
 else
     echo "WARNING: app-a40 APK를 찾을 수 없습니다."
-    echo "  먼저 빌드하세요: ./gradlew :app:assembleA40Debug"
-    echo "  또는 app-a40-release.apk를 이 디렉토리에 복사하세요."
+    echo "  app-a40-release.apk를 이 디렉토리에 복사하세요."
 fi
 
 MISSING=0
@@ -84,7 +109,7 @@ for f in "${REQUIRED_FILES[@]}"; do
     fi
 done
 if [ $MISSING -eq 1 ]; then
-    echo "필수 파일이 누락되었습니다. patches/android7/ 디렉토리를 확인하세요."
+    echo "필수 파일이 누락되었습니다."
     exit 1
 fi
 
@@ -163,13 +188,14 @@ echo "  부트 스크립트 설치 완료"
 echo "[6/7] WebView 패치 (framework-res.apk)..."
 
 # 현재 설치된 framework-res 가져오기
-adb_cmd shell "cat /system/framework/framework-res.apk" > /tmp/framework-res-device.apk 2>/dev/null \
-    || adb_cmd pull //system/framework/framework-res.apk /tmp/framework-res-device.apk 2>/dev/null
+FW_APK="$TMPDIR/framework-res-device.apk"
+adb_cmd shell "cat /system/framework/framework-res.apk" > "$FW_APK" 2>/dev/null \
+    || adb_cmd pull //system/framework/framework-res.apk "$FW_APK" 2>/dev/null
 
 # 이미 패치됐는지 확인
-CONFIG_SIZE=$(python3 -c "
+CONFIG_SIZE=$($PYTHON -c "
 import zipfile
-z = zipfile.ZipFile('/tmp/framework-res-device.apk', 'r')
+z = zipfile.ZipFile('$FW_APK', 'r')
 info = z.getinfo('res/xml/config_webview_packages.xml')
 print(info.file_size)
 z.close()
@@ -182,10 +208,10 @@ else
     adb_cmd shell "cp /system/framework/framework-res.apk /system/framework/framework-res.apk.bak" 2>&1
 
     # 패치
-    python3 patch_framework_res.py /tmp/framework-res-device.apk config_webview_packages_patched.bin 2>&1 | grep -E "REPLACED|Original|Patched|Output"
+    $PYTHON patch_framework_res.py "$FW_APK" config_webview_packages_patched.bin 2>&1 | grep -E "REPLACED|Original|Patched|Output"
 
     # 푸시
-    PATCHED_APK="/tmp/framework-res-device-patched.apk"
+    PATCHED_APK="$TMPDIR/framework-res-device-patched.apk"
     adb_cmd push "$PATCHED_APK" //data/local/tmp/framework-res-patched.apk 2>&1 | tail -1
     adb_cmd shell "cp /data/local/tmp/framework-res-patched.apk /system/framework/framework-res.apk" 2>&1
     adb_cmd shell "chmod 644 /system/framework/framework-res.apk" 2>&1
