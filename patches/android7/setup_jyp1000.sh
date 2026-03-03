@@ -99,13 +99,22 @@ fi
 
 # ── Step 1: 앱 설치 ─────────────────────────────────────────────────────────
 
-echo "[2/3] 앱 설치... ($APP_APK)"
+echo "[2/4] 앱 설치... ($APP_APK)"
 adb_cmd install -r "$APP_APK" 2>&1 | tail -1
 echo "  앱 설치 완료"
 
-# ── Step 2: 확인 ────────────────────────────────────────────────────────────
+# ── Step 2: 인쇄 드라이버 활성화 ─────────────────────────────────────────────
 
-echo "[3/3] 설치 확인..."
+echo "[3/4] 인쇄 드라이버 활성화..."
+adb_cmd shell "settings put secure enabled_print_services com.betona.printdriver/com.betona.printdriver.LibroPrintService" 2>&1
+adb_cmd shell "settings put secure disabled_print_services ''" 2>&1
+adb_cmd shell "pm grant com.android.printspooler android.permission.ACCESS_COARSE_LOCATION" 2>/dev/null || true
+adb_cmd shell "pm grant com.android.printspooler android.permission.ACCESS_FINE_LOCATION" 2>/dev/null || true
+echo "  인쇄 드라이버 활성화 완료"
+
+# ── Step 3: 확인 ────────────────────────────────────────────────────────────
+
+echo "[4/4] 설치 확인..."
 INSTALLED=$(adb_cmd shell pm list packages com.betona.printdriver 2>/dev/null | grep "com.betona.printdriver" || echo "")
 if [ -n "$INSTALLED" ]; then
     echo "  앱: 설치됨 (com.betona.printdriver)"
@@ -118,7 +127,7 @@ PRINT_SERVICE=$(adb_cmd shell settings get secure enabled_print_services 2>/dev/
 if echo "$PRINT_SERVICE" | grep -q "LibroPrintService"; then
     echo "  인쇄 드라이버: 활성화"
 else
-    echo "  인쇄 드라이버: 미활성화 (앱 실행 후 자동 활성화됨)"
+    echo "  인쇄 드라이버: 미활성화 (WARNING)"
 fi
 
 echo "  /dev/printer: $PRINTER_EXISTS"
@@ -136,7 +145,7 @@ if [ "$PRINTER_EXISTS" = "NO" ]; then
     echo ""
 fi
 
-echo "앱을 실행하면 인쇄 드라이버가 자동으로 활성화됩니다."
+echo "인쇄 드라이버가 활성화되었습니다."
 echo ""
 
 if [ "$AUTO_REBOOT" = "1" ]; then
