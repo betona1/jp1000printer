@@ -53,7 +53,7 @@ object AppPrefs {
 
     fun getAutoStart(context: Context): Boolean {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getBoolean(KEY_AUTO_START, false)
+            .getBoolean(KEY_AUTO_START, true)
     }
 
     fun setAutoStart(context: Context, enabled: Boolean) {
@@ -120,7 +120,7 @@ object AppPrefs {
 
     fun getShowPowerButton(context: Context): Boolean {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getBoolean(KEY_SHOW_POWER_BTN, false)
+            .getBoolean(KEY_SHOW_POWER_BTN, true)
     }
 
     fun setShowPowerButton(context: Context, show: Boolean) {
@@ -130,7 +130,7 @@ object AppPrefs {
 
     fun getShowSchedule(context: Context): Boolean {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getBoolean(KEY_SHOW_SCHEDULE, false)
+            .getBoolean(KEY_SHOW_SCHEDULE, true)
     }
 
     fun setShowSchedule(context: Context, show: Boolean) {
@@ -246,7 +246,7 @@ object AppPrefs {
 
     fun isNightSaveMode(context: Context): Boolean {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getBoolean(KEY_NIGHT_SAVE, true)
+            .getBoolean(KEY_NIGHT_SAVE, false)
     }
 
     fun setNightSaveMode(context: Context, enabled: Boolean) {
@@ -290,7 +290,7 @@ object AppPrefs {
     fun getDaySchedule(context: Context, dayIndex: Int): DaySchedule {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         return DaySchedule(
-            enabled = prefs.getBoolean("sched_${dayIndex}_on", false),
+            enabled = prefs.getBoolean("sched_${dayIndex}_on", dayIndex in 0..4),
             startHour = prefs.getInt("sched_${dayIndex}_sh", 9),
             startMin = prefs.getInt("sched_${dayIndex}_sm", 0),
             endHour = prefs.getInt("sched_${dayIndex}_eh", 18),
