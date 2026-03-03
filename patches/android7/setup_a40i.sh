@@ -15,8 +15,7 @@
 #   bash setup_a40i.sh -t 4              # transport_id 지정
 # ============================================================================
 
-set -euo pipefail
-trap 'echo "ERROR: 스크립트가 line $LINENO 에서 실패했습니다."; exit 1' ERR
+set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
@@ -223,7 +222,7 @@ else
     adb_cmd shell "cp /system/framework/framework-res.apk /system/framework/framework-res.apk.bak" 2>&1
 
     # 패치 (Python에는 Windows 경로 전달)
-    $PYTHON patch_framework_res.py "$FW_APK_WIN" config_webview_packages_patched.bin 2>&1 | grep -E "REPLACED|Original|Patched|Output"
+    $PYTHON patch_framework_res.py "$FW_APK_WIN" config_webview_packages_patched.bin 2>&1 | grep -E "REPLACED|Original|Patched|Output" || true
 
     # 푸시 (Python 출력은 Windows 경로 기준)
     PATCHED_APK="$TMPDIR_WIN/framework-res-device-patched.apk"
