@@ -242,9 +242,11 @@ adb reboot
 | 항목 | A40i (Android 7) | JY-P1000 (Android 11) |
 |------|-------------------|------------------------|
 | 패키지명 | com.android.printdriver | com.betona.printdriver |
+| 설치 스크립트 | `setup_a40i.sh` (8단계) | `setup_jyp1000.sh` (4단계) |
 | Chrome | v76 → 113 (수동 업데이트) | 최신 버전 |
 | WebView | v52 → Chrome 113 (패치) | 시스템 WebView 사용 |
-| Root | adb root 가능 | adb root 가능 |
-| 부트 스크립트 | 필요 (설정 초기화) | 불필요 |
+| Root / su | adb root + su 가능 | su 없음 |
+| 재부팅 후 설정 유지 | 부트 스크립트 (printdriver.rc) | WRITE_SECURE_SETTINGS 권한 |
 | framework 패치 | 필요 (WebView) | 불필요 |
+| PrintSpooler 패치 | 필요 (mdpi 크래시) | 불필요 |
 | 프린터 경로 | /dev/printer | /dev/printer |

@@ -13,13 +13,39 @@ LibroPrintDriver를 새 기기에 설치하는 단계별 가이드입니다.
 | 빌드 | `standard` | `a40` |
 | 패키지명 | `com.betona.printdriver` | `com.android.printdriver` |
 | 시스템 패치 | 불필요 | **필수** (4가지) |
-| 셋업 난이도 | 쉬움 (APK만 설치) | 복잡 (시스템 패치 필요) |
+| 재부팅 후 설정 유지 | `WRITE_SECURE_SETTINGS` 권한 | 부트 스크립트 (`printdriver.rc`) |
+| su (root shell) | 없음 | 있음 (`adb root`) |
+| 설치 스크립트 | `setup_jyp1000.sh` | `setup_a40i.sh` |
+| 셋업 난이도 | 쉬움 (APK + 권한) | 복잡 (시스템 패치 필요) |
 
 ---
 
 ## A. JY-P1000 (Android 11) — 간단 셋업
 
-### 1단계: 빌드 & 설치
+### 자동 설치 (권장)
+
+```bash
+# patches/android7/ 또는 Downloads/LibroPrintDriver/ 에서 실행
+bash setup_jyp1000.sh                    # 기기가 1대만 연결된 경우
+bash setup_jyp1000.sh -s <시리얼>         # 시리얼 지정
+bash setup_jyp1000.sh -t <ID>            # transport_id 지정
+bash setup_jyp1000.sh -r                 # 설치 후 자동 재부팅
+```
+
+스크립트가 수행하는 작업 (4단계):
+1. 기기 연결 확인 (모델, SDK, /dev/printer)
+2. 앱 설치 (`app-standard-release.apk` 또는 `app-standard-debug.apk`)
+3. 인쇄 드라이버 활성화 + 권한 부여
+   - `enabled_print_services` 설정
+   - PrintSpooler 위치 권한 부여
+   - **`WRITE_SECURE_SETTINGS` 권한 부여** (재부팅 후 자동 복원용)
+4. 설치 확인
+
+**필요 파일**: `app-standard-release.apk` (또는 debug), `adb.exe` (PATH 또는 같은 폴더)
+
+### 수동 설치 (단계별)
+
+#### 1단계: 빌드 & 설치
 
 ```bash
 # PC에서 실행
@@ -33,23 +59,57 @@ adb devices -l
 adb -s <시리얼> install -r app/build/outputs/apk/standard/debug/app-standard-debug.apk
 ```
 
-### 2단계: 앱 실행
+#### 2단계: 인쇄 드라이버 활성화
 
 ```bash
-adb -s <시리얼> shell am start -n com.betona.printdriver/.WebPrintActivity
+# PrintService 활성화
+adb shell settings put secure enabled_print_services com.betona.printdriver/com.betona.printdriver.LibroPrintService
+adb shell settings put secure disabled_print_services ""
+
+# PrintSpooler 위치 권한 (크래시 방지)
+adb shell pm grant com.android.printspooler android.permission.ACCESS_COARSE_LOCATION
+adb shell pm grant com.android.printspooler android.permission.ACCESS_FINE_LOCATION
+
+# ★ 재부팅 후 자동 복원을 위한 권한 (중요!)
+adb shell pm grant com.betona.printdriver android.permission.WRITE_SECURE_SETTINGS
 ```
 
-### 3단계: 확인
+> **`WRITE_SECURE_SETTINGS` 설명**: Android 11에는 `su`가 없어서 부트 스크립트로
+> 설정을 복원할 수 없습니다. 대신 이 권한을 부여하면 앱의 `BootCompletedReceiver`가
+> 재부팅 후 `Settings.Secure.putString()` API로 직접 인쇄 드라이버를 재활성화합니다.
+> 이 권한은 한 번 부여하면 재부팅 후에도 유지됩니다.
+
+#### 3단계: 앱 실행 & 확인
 
 ```bash
+# 앱 실행
+adb shell am start -n com.betona.printdriver/.WebPrintActivity
+
 # PrintService 상태 확인
-adb -s <시리얼> shell dumpsys print
+adb shell settings get secure enabled_print_services
+# 기대: com.betona.printdriver/com.betona.printdriver.LibroPrintService
+
+# WRITE_SECURE_SETTINGS 권한 확인
+adb shell dumpsys package com.betona.printdriver | grep WRITE_SECURE
+# 기대: android.permission.WRITE_SECURE_SETTINGS: granted=true
 
 # 서버 동작 확인
-adb -s <시리얼> logcat -d -s WebServerService IppServer RawPrintServer
+adb logcat -d -s WebServerService IppServer RawPrintServer
 ```
 
-**끝!** JY-P1000은 추가 패치가 필요 없습니다.
+#### 4단계: 재부팅 테스트 (권장)
+
+```bash
+adb reboot
+# 부팅 완료 후:
+adb shell settings get secure enabled_print_services
+# → 자동 복원되었는지 확인
+
+adb logcat -d -s BootReceiver
+# 기대: Settings API: enabled=...LibroPrintService ok=true
+```
+
+**끝!** JY-P1000은 시스템 패치가 필요 없습니다.
 
 ---
 
@@ -256,8 +316,11 @@ adb -s <시리얼> shell am start -n com.android.printdriver/.WebPrintActivity  
 adb -s <시리얼> logcat -s WebPrint WebServerService IppServer RawPrintServer LibroPrintService AndroidRuntime
 
 # === PrintService 수동 활성화 ===
-adb shell settings put secure enabled_print_services com.betona.printdriver/.LibroPrintService           # JY-P1000
-adb shell settings put secure enabled_print_services com.android.printdriver/.LibroPrintService          # A40i (주의: com.android.printdriver)
+adb shell settings put secure enabled_print_services com.betona.printdriver/com.betona.printdriver.LibroPrintService    # JY-P1000
+adb shell settings put secure enabled_print_services com.android.printdriver/com.betona.printdriver.LibroPrintService   # A40i
+
+# === 재부팅 후 자동 복원 권한 (JY-P1000 / Android 11) ===
+adb shell pm grant com.betona.printdriver android.permission.WRITE_SECURE_SETTINGS
 
 # === 기기 IP 확인 ===
 adb -s <시리얼> shell ip addr show | grep "inet "
@@ -270,7 +333,7 @@ adb -s <시리얼> shell dumpsys print
 
 ## E. 트러블슈팅
 
-### PrintService가 안 보임
+### PrintService가 안 보임 / 비활성화
 
 ```bash
 # enabled_print_services 확인
@@ -279,6 +342,41 @@ adb shell settings get secure enabled_print_services
 # 비어있으면 수동 설정
 adb shell settings put secure enabled_print_services <패키지명>/com.betona.printdriver.LibroPrintService
 adb shell settings put secure disabled_print_services ""
+```
+
+### 재부팅 후 인쇄 드라이버 비활성화 (Android 11)
+
+**원인**: Android 11에는 `su`가 없어 `BootCompletedReceiver`가 실패
+
+**해결**:
+```bash
+# WRITE_SECURE_SETTINGS 권한 부여 (한 번만 하면 됨)
+adb shell pm grant com.betona.printdriver android.permission.WRITE_SECURE_SETTINGS
+
+# 인쇄 드라이버 활성화
+adb shell settings put secure enabled_print_services com.betona.printdriver/com.betona.printdriver.LibroPrintService
+
+# 확인
+adb shell dumpsys package com.betona.printdriver | grep WRITE_SECURE
+# → granted=true 확인
+
+# 재부팅 후 자동 복원 테스트
+adb reboot
+# 부팅 후:
+adb logcat -d -s BootReceiver | grep "Settings API"
+# → Settings API: enabled=...LibroPrintService ok=true
+```
+
+### 재부팅 후 인쇄 드라이버 비활성화 (A40i / Android 7)
+
+**원인**: 시스템이 매 부팅 시 `enabled_print_services` 초기화
+
+**해결**: 부트 스크립트가 설치되었는지 확인
+```bash
+adb root && adb remount
+adb shell ls -la /system/bin/configure_print.sh
+adb shell ls -la /system/etc/init/printdriver.rc
+# 없으면 B섹션 3단계 참고하여 설치
 ```
 
 ### 앱이 백그라운드에서 죽음 (A40i)
@@ -303,7 +401,7 @@ adb shell ls -la /system/app/PrintSpooler/
 adb shell settings get global webview_provider
 # com.android.chrome 이어야 함
 
-# Chrome 119 설치 확인
+# Chrome 113 설치 확인
 adb shell pm list packages | grep chrome
 ```
 
@@ -316,6 +414,29 @@ adb shell ip addr show
 # 포트 확인 (8080=웹관리, 6631=IPP, 9100=RAW)
 adb shell netstat -tlnp | grep -E "8080|6631|9100"
 ```
+
+### adb 연결 안됨 / server conflict
+
+**증상**: `adb devices`가 빈 목록이거나 `error: cannot connect to daemon`
+
+**원인**: 여러 adb.exe가 동시 실행되면 서버 충돌
+
+**해결**:
+```bash
+# Windows
+taskkill /F /IM adb.exe
+# 잠시 대기 후
+adb devices -l
+
+# Git Bash
+taskkill //F //IM adb.exe
+```
+
+### /dev/printer가 없음
+
+- 감열 프린터 하드웨어가 연결되어 있는지 확인
+- 기기 재부팅 후 재확인
+- `adb shell ls -la /dev/printer` 로 확인
 
 ---
 
