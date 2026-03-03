@@ -23,6 +23,7 @@ object PowerScheduleManager {
 
     /**
      * Schedule next screen-off and screen-on alarms.
+     * Also checks if we're currently within an active window and wakes screen if so.
      * Call after boot and after schedule changes.
      */
     fun scheduleNext(context: Context) {
@@ -49,6 +50,37 @@ object PowerScheduleManager {
             setAlarm(context, nextOn.timeInMillis, REQUEST_SCREEN_ON, ScreenOnReceiver::class.java)
             Log.i(TAG, "Next screen-on: ${fmt(nextOn)}")
         }
+
+        // If currently within an active window (start <= now < end), wake up screen
+        if (isWithinActiveWindow(now, schedules)) {
+            Log.i(TAG, "Currently within active window, waking screen")
+            wakeUpScreen(context)
+            // Launch WebPrintActivity to ensure screen is on
+            val launchIntent = Intent(context, WebPrintActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
+            try {
+                context.startActivity(launchIntent)
+            } catch (e: Exception) {
+                Log.d(TAG, "Could not launch activity: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Check if the current time is within today's active schedule window
+     * (between startTime and endTime).
+     */
+    fun isWithinActiveWindow(now: Calendar, schedules: List<DaySchedule>): Boolean {
+        val dayIndex = calendarDayToIndex(now.get(Calendar.DAY_OF_WEEK))
+        val sched = schedules[dayIndex]
+        if (!sched.enabled) return false
+
+        val nowMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
+        val startMinutes = sched.startHour * 60 + sched.startMin
+        val endMinutes = sched.endHour * 60 + sched.endMin
+
+        return nowMinutes in startMinutes until endMinutes
     }
 
     /**
