@@ -98,6 +98,9 @@ class WebPrintActivity : AppCompatActivity() {
         // Auto-enable PrintService (gets disabled on app reinstall)
         enablePrintService()
 
+        // Re-register schedule alarms (lost after force-stop/reinstall)
+        PowerScheduleManager.scheduleNext(this)
+
         // Keep screen on during normal operation
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
