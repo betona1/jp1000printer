@@ -15,7 +15,8 @@
 #   bash setup_a40i.sh -t 4              # transport_id 지정
 # ============================================================================
 
-set -e
+set -euo pipefail
+trap 'echo "ERROR: 스크립트가 line $LINENO 에서 실패했습니다."; exit 1' ERR
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
@@ -51,9 +52,15 @@ fi
 
 # ── 임시 디렉토리 (Windows 호환) ─────────────────────────────────────────────
 
-# Windows 경로의 백슬래시를 슬래시로 변환
+# Git Bash에서 /tmp은 bash에서는 작동하지만 Python에서는 인식 불가
+# cygpath로 Windows 실제 경로를 구해서 Python에도 전달
 TMPDIR="${TEMP:-${TMP:-/tmp}}"
 TMPDIR="${TMPDIR//\\//}"
+if command -v cygpath &>/dev/null; then
+    TMPDIR_WIN="$(cygpath -m "$TMPDIR")"
+else
+    TMPDIR_WIN="$TMPDIR"
+fi
 
 # ── 인자 파싱 ───────────────────────────────────────────────────────────────
 
@@ -189,17 +196,11 @@ echo "[6/7] WebView 패치 (framework-res.apk)..."
 
 # 현재 설치된 framework-res 가져오기
 FW_APK="$TMPDIR/framework-res-device.apk"
-adb_cmd shell "cat /system/framework/framework-res.apk" > "$FW_APK" 2>/dev/null \
-    || adb_cmd pull //system/framework/framework-res.apk "$FW_APK" 2>/dev/null
+FW_APK_WIN="$TMPDIR_WIN/framework-res-device.apk"
+adb_cmd pull //system/framework/framework-res.apk "$FW_APK" 2>&1 | tail -1
 
-# 이미 패치됐는지 확인
-CONFIG_SIZE=$($PYTHON -c "
-import zipfile
-z = zipfile.ZipFile('$FW_APK', 'r')
-info = z.getinfo('res/xml/config_webview_packages.xml')
-print(info.file_size)
-z.close()
-" 2>/dev/null || echo "0")
+# 이미 패치됐는지 확인 (Python에는 Windows 경로 전달)
+CONFIG_SIZE="$($PYTHON -c "import zipfile; z=zipfile.ZipFile('$FW_APK_WIN','r'); print(z.getinfo('res/xml/config_webview_packages.xml').file_size); z.close()" 2>/dev/null)" || CONFIG_SIZE="0"
 
 if [ "$CONFIG_SIZE" = "540" ]; then
     echo "  SKIP: framework-res.apk 이미 패치됨"
@@ -207,11 +208,11 @@ else
     # 백업
     adb_cmd shell "cp /system/framework/framework-res.apk /system/framework/framework-res.apk.bak" 2>&1
 
-    # 패치
-    $PYTHON patch_framework_res.py "$FW_APK" config_webview_packages_patched.bin 2>&1 | grep -E "REPLACED|Original|Patched|Output"
+    # 패치 (Python에는 Windows 경로 전달)
+    $PYTHON patch_framework_res.py "$FW_APK_WIN" config_webview_packages_patched.bin 2>&1 | grep -E "REPLACED|Original|Patched|Output"
 
-    # 푸시
-    PATCHED_APK="$TMPDIR/framework-res-device-patched.apk"
+    # 푸시 (Python 출력은 Windows 경로 기준)
+    PATCHED_APK="$TMPDIR_WIN/framework-res-device-patched.apk"
     adb_cmd push "$PATCHED_APK" //data/local/tmp/framework-res-patched.apk 2>&1 | tail -1
     adb_cmd shell "cp /data/local/tmp/framework-res-patched.apk /system/framework/framework-res.apk" 2>&1
     adb_cmd shell "chmod 644 /system/framework/framework-res.apk" 2>&1
