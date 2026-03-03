@@ -23,10 +23,11 @@ object PowerScheduleManager {
 
     /**
      * Schedule next screen-off and screen-on alarms.
-     * Also checks if we're currently within an active window and wakes screen if so.
-     * Call after boot and after schedule changes.
+     * @param wakeIfActive if true, also checks if we're currently within an active
+     *   window and wakes screen if so. Pass false when called from turnScreenOff()
+     *   to avoid immediately undoing the screen off.
      */
-    fun scheduleNext(context: Context) {
+    fun scheduleNext(context: Context, wakeIfActive: Boolean = true) {
         val schedules = (0..6).map { AppPrefs.getDaySchedule(context, it) }
         if (schedules.none { it.enabled }) {
             cancelAlarm(context, REQUEST_SCREEN_OFF)
@@ -52,10 +53,10 @@ object PowerScheduleManager {
         }
 
         // If currently within an active window (start <= now < end), wake up screen
-        if (isWithinActiveWindow(now, schedules)) {
+        // Skip this when called from turnScreenOff() to avoid undoing the screen off
+        if (wakeIfActive && isWithinActiveWindow(now, schedules)) {
             Log.i(TAG, "Currently within active window, waking screen")
             wakeUpScreen(context)
-            // Launch WebPrintActivity with EXTRA_SCREEN_ON to remove black overlay
             val launchIntent = Intent(context, WebPrintActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
                 putExtra(WebPrintActivity.EXTRA_SCREEN_ON, true)

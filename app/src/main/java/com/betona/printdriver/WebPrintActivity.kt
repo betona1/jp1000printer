@@ -432,7 +432,7 @@ class WebPrintActivity : AppCompatActivity() {
         params.screenBrightness = 0.0f
         window.attributes = params
         Log.i(TAG, "Screen off: black overlay + brightness 0")
-        PowerScheduleManager.scheduleNext(this)
+        PowerScheduleManager.scheduleNext(this, wakeIfActive = false)
     }
 
     private fun wakeScreen() {
