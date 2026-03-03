@@ -13,6 +13,7 @@
 #   bash setup_a40i.sh                    # 기기가 1대만 연결된 경우
 #   bash setup_a40i.sh -s 20080411        # 시리얼 지정
 #   bash setup_a40i.sh -t 4              # transport_id 지정
+#   bash setup_a40i.sh -t 4 -r           # 설치 후 자동 재부팅
 # ============================================================================
 
 set -e
@@ -64,11 +65,13 @@ fi
 # ── 인자 파싱 ───────────────────────────────────────────────────────────────
 
 ADB_TARGET=""
+AUTO_REBOOT=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -s) ADB_TARGET="-s $2"; shift 2 ;;
         -t) ADB_TARGET="-t $2"; shift 2 ;;
-        *)  echo "Usage: $0 [-s serial | -t transport_id]"; exit 1 ;;
+        -r) AUTO_REBOOT=1; shift ;;
+        *)  echo "Usage: $0 [-s serial | -t transport_id] [-r]"; exit 1 ;;
     esac
 done
 
@@ -249,9 +252,13 @@ echo "============================================"
 echo "  설치 완료!"
 echo "============================================"
 echo ""
-echo "재부팅이 필요합니다. 지금 재부팅하시겠습니까?"
-read -p "(y/N) " -n 1 -r
-echo
+if [ "$AUTO_REBOOT" = "1" ]; then
+    REPLY="y"
+else
+    echo "재부팅이 필요합니다. 지금 재부팅하시겠습니까?"
+    read -p "(y/N) " -n 1 -r
+    echo
+fi
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     adb_cmd reboot
     echo "재부팅 중... 약 30초 후 기기가 시작됩니다."
