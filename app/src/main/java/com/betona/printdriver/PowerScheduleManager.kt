@@ -55,9 +55,10 @@ object PowerScheduleManager {
         if (isWithinActiveWindow(now, schedules)) {
             Log.i(TAG, "Currently within active window, waking screen")
             wakeUpScreen(context)
-            // Launch WebPrintActivity to ensure screen is on
+            // Launch WebPrintActivity with EXTRA_SCREEN_ON to remove black overlay
             val launchIntent = Intent(context, WebPrintActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra(WebPrintActivity.EXTRA_SCREEN_ON, true)
             }
             try {
                 context.startActivity(launchIntent)

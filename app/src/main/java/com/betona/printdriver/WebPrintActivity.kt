@@ -38,6 +38,7 @@ class WebPrintActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "WebPrint"
         const val EXTRA_SCREEN_OFF_NOW = "screen_off_now"
+        const val EXTRA_SCREEN_ON = "screen_on"
         private const val MOBILE_UA =
             "Mozilla/5.0 (Linux; Android 13; Pixel Tablet) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
         private const val DESKTOP_UA =
@@ -82,6 +83,9 @@ class WebPrintActivity : AppCompatActivity() {
         }
         if (intent?.getBooleanExtra(EXTRA_SCREEN_OFF_NOW, false) == true) {
             turnScreenOff()
+        }
+        if (intent?.getBooleanExtra(EXTRA_SCREEN_ON, false) == true) {
+            wakeScreen()
         }
     }
 

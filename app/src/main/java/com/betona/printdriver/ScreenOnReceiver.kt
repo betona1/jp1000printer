@@ -17,9 +17,10 @@ class ScreenOnReceiver : BroadcastReceiver() {
         // Wake up the screen
         PowerScheduleManager.wakeUpScreen(context)
 
-        // Launch WebPrintActivity
+        // Launch WebPrintActivity with EXTRA_SCREEN_ON to remove black overlay
         val launchIntent = Intent(context, WebPrintActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(WebPrintActivity.EXTRA_SCREEN_ON, true)
         }
         context.startActivity(launchIntent)
 
