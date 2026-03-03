@@ -93,6 +93,7 @@ REQUIRED_FILES=(
     "config_webview_packages_patched.bin"
     "patch_framework_res.py"
     "chrome113.apk"
+    "PrintSpooler_patched.apk"
 )
 
 # app APK: 릴리즈 → 디버그 순으로 찾기
@@ -122,7 +123,7 @@ fi
 
 # ── 기기 연결 확인 ──────────────────────────────────────────────────────────
 
-echo "[1/7] 기기 연결 확인..."
+echo "[1/8] 기기 연결 확인..."
 DEVICE_INFO=$(adb_cmd shell getprop ro.build.display.id 2>/dev/null || true)
 if [ -z "$DEVICE_INFO" ]; then
     echo "ERROR: 기기에 연결할 수 없습니다. USB 연결과 adb 인가를 확인하세요."
@@ -148,7 +149,7 @@ fi
 
 # ── Step 1: 앱 설치 ─────────────────────────────────────────────────────────
 
-echo "[2/7] 앱 설치..."
+echo "[2/8] 앱 설치..."
 if [ -n "$APP_APK" ]; then
     adb_cmd install -r "$APP_APK" 2>&1 | tail -1
     echo "  앱 설치 완료: $APP_APK"
@@ -158,7 +159,7 @@ fi
 
 # ── Step 2: Chrome 113 설치 ──────────────────────────────────────────────────
 
-echo "[3/7] Chrome 113 설치..."
+echo "[3/8] Chrome 113 설치..."
 CURRENT_CHROME=$(adb_cmd shell dumpsys package com.android.chrome 2>/dev/null | grep "versionName=" | head -1 | sed 's/.*versionName=//' || echo "")
 if [[ "$CURRENT_CHROME" == "113."* ]]; then
     echo "  SKIP: Chrome 113 이미 설치됨 ($CURRENT_CHROME)"
@@ -171,7 +172,7 @@ fi
 
 # ── Step 3: Root + Remount ───────────────────────────────────────────────────
 
-echo "[4/7] 시스템 파티션 마운트..."
+echo "[4/8] 시스템 파티션 마운트..."
 adb_cmd root 2>&1 | tail -1
 sleep 1
 # transport_id가 바뀔 수 있으므로 재연결 대기
@@ -180,7 +181,20 @@ adb_cmd remount 2>&1 | tail -1
 
 # ── Step 4: 부트 스크립트 설치 ───────────────────────────────────────────────
 
-echo "[5/7] 부트 스크립트 설치..."
+echo "[5/8] PrintSpooler 패치 (mdpi drawable 크래시 수정)..."
+SPOOLER_SIZE=$(adb_cmd shell "wc -c < /system/app/PrintSpooler/PrintSpooler.apk" 2>/dev/null | tr -d '\r')
+PATCHED_SIZE=$(wc -c < PrintSpooler_patched.apk | tr -d ' ')
+if [ "$SPOOLER_SIZE" = "$PATCHED_SIZE" ]; then
+    echo "  SKIP: PrintSpooler 이미 패치됨"
+else
+    adb_cmd shell "cp /system/app/PrintSpooler/PrintSpooler.apk /system/app/PrintSpooler/PrintSpooler.apk.bak" 2>&1
+    adb_cmd push PrintSpooler_patched.apk //data/local/tmp/PrintSpooler.apk 2>&1 | tail -1
+    adb_cmd shell "cp /data/local/tmp/PrintSpooler.apk /system/app/PrintSpooler/PrintSpooler.apk" 2>&1
+    adb_cmd shell "chmod 644 /system/app/PrintSpooler/PrintSpooler.apk" 2>&1
+    echo "  PrintSpooler 패치 완료"
+fi
+
+echo "[6/8] 부트 스크립트 설치..."
 adb_cmd push configure_print.sh //data/local/tmp/configure_print.sh 2>&1 | tail -1
 adb_cmd push printdriver.rc //data/local/tmp/printdriver.rc 2>&1 | tail -1
 adb_cmd shell "cp /data/local/tmp/configure_print.sh /system/bin/configure_print.sh" 2>&1
@@ -192,7 +206,7 @@ echo "  부트 스크립트 설치 완료"
 
 # ── Step 5: framework-res.apk 패치 ──────────────────────────────────────────
 
-echo "[6/7] WebView 패치 (framework-res.apk)..."
+echo "[7/8] WebView 패치 (framework-res.apk)..."
 
 # 현재 설치된 framework-res 가져오기
 FW_APK="$TMPDIR/framework-res-device.apk"
@@ -221,7 +235,7 @@ fi
 
 # ── Step 6: 설정 적용 ────────────────────────────────────────────────────────
 
-echo "[7/7] 설정 적용..."
+echo "[8/8] 설정 적용..."
 adb_cmd shell "settings put global webview_provider com.android.chrome" 2>&1
 adb_cmd shell "settings put secure enabled_print_services com.android.printdriver/com.betona.printdriver.LibroPrintService" 2>&1
 adb_cmd shell "settings put secure disabled_print_services ''" 2>&1
