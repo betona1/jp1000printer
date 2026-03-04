@@ -297,6 +297,7 @@ class WebPrintActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        hideSystemBars()
         // Check if we should turn screen off (from admin page)
         if (intent?.getBooleanExtra(EXTRA_SCREEN_OFF_NOW, false) == true) {
             intent.removeExtra(EXTRA_SCREEN_OFF_NOW)

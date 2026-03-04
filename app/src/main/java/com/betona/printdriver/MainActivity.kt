@@ -96,14 +96,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
@@ -1163,14 +1160,6 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     private fun SchoolUrlCard() {
-        var textFieldValue by remember {
-            mutableStateOf(TextFieldValue(schoolUrl))
-        }
-        // Sync when schoolUrl changes externally
-        if (textFieldValue.text != schoolUrl && !textFieldValue.text.contentEquals(schoolUrl)) {
-            textFieldValue = TextFieldValue(schoolUrl)
-        }
-
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
@@ -1188,23 +1177,12 @@ class MainActivity : ComponentActivity() {
                 }
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
-                    value = textFieldValue,
-                    onValueChange = {
-                        textFieldValue = it
-                        schoolUrl = it.text
-                    },
+                    value = schoolUrl,
+                    onValueChange = { schoolUrl = it },
                     label = { Text("학교 홈페이지 URL") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .onFocusChanged { focusState ->
-                            if (focusState.isFocused) {
-                                textFieldValue = textFieldValue.copy(
-                                    selection = TextRange(0, textFieldValue.text.length)
-                                )
-                            }
-                        }
+                    modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(8.dp))
                 Button(
