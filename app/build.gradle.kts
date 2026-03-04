@@ -20,8 +20,8 @@ android {
         applicationId = "com.betona.printdriver"
         minSdk = 24
         targetSdk = 26
-        versionCode = 18
-        versionName = "1.5.6"
+        versionCode = 19
+        versionName = "1.5.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

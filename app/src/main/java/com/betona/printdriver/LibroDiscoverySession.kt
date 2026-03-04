@@ -41,28 +41,27 @@ class LibroDiscoverySession(
 
         val resolution = PrintAttributes.Resolution("203dpi", "203 DPI", 203, 203)
 
-        // Paper width: A4 (210mm = 8268 mils) so apps format content at readable size.
-        // The driver scales the rendered PDF to 576px (72mm) thermal width.
-        val receiptA4 = PrintAttributes.MediaSize(
-            "RECEIPT_A4x297",
-            "A4 x 297mm",
-            8268, 11693    // 210mm x 297mm (A4)
+        // Paper width: 72mm (2835 mils) = actual thermal print width (576px @ 203dpi)
+        val receipt72x150 = PrintAttributes.MediaSize(
+            "RECEIPT_72x150",
+            "72mm x 150mm",
+            2835, 5906     // 72mm x 150mm
         )
-        val receiptA4Long = PrintAttributes.MediaSize(
-            "RECEIPT_A4x600",
-            "A4 x 600mm",
-            8268, 23622    // 210mm x 600mm
+        val receipt72x600 = PrintAttributes.MediaSize(
+            "RECEIPT_72x600",
+            "72mm x 600mm",
+            2835, 23622    // 72mm x 600mm
         )
-        val receiptA4XLong = PrintAttributes.MediaSize(
-            "RECEIPT_A4x1200",
-            "A4 x 1200mm",
-            8268, 47244    // 210mm x 1200mm
+        val receipt72x1200 = PrintAttributes.MediaSize(
+            "RECEIPT_72x1200",
+            "72mm x 1200mm",
+            2835, 47244    // 72mm x 1200mm
         )
 
         val capabilities = PrinterCapabilitiesInfo.Builder(printerId)
-            .addMediaSize(receiptA4, true)       // default: A4 height
-            .addMediaSize(receiptA4Long, false)
-            .addMediaSize(receiptA4XLong, false)
+            .addMediaSize(receipt72x150, true)       // default
+            .addMediaSize(receipt72x600, false)
+            .addMediaSize(receipt72x1200, false)
             .addResolution(resolution, true)
             .setColorModes(
                 PrintAttributes.COLOR_MODE_MONOCHROME,
