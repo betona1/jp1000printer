@@ -20,8 +20,8 @@ android {
         applicationId = "com.betona.printdriver"
         minSdk = 24
         targetSdk = 26
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 15
+        versionName = "1.5.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -31,11 +31,13 @@ android {
         create("standard") {
             dimension = "device"
             // JY-P1000 (Android 11) — default package
+            buildConfigField("String", "APK_ASSET_NAME", "\"app-standard-release.apk\"")
         }
         create("a40") {
             dimension = "device"
             // A40i (Android 7) — com.android prefix to bypass BackgroundManagerService whitelist
             applicationId = "com.android.printdriver"
+            buildConfigField("String", "APK_ASSET_NAME", "\"app-a40-release.apk\"")
         }
     }
 
@@ -62,6 +64,7 @@ android {
     buildFeatures {
         viewBinding = true
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.2"

@@ -110,11 +110,19 @@ import androidx.core.content.FileProvider
 import com.betona.printdriver.web.WebServerService
 import java.io.File
 import java.io.FileOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import android.app.TimePickerDialog
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableFloatStateOf
+import org.json.JSONObject
 
 /**
  * Admin settings & test UI — Jetpack Compose Material3.
@@ -154,6 +162,14 @@ class MainActivity : ComponentActivity() {
     private var webRunning by mutableStateOf(false)
     private var rawRunning by mutableStateOf(false)
     private var ippRunning by mutableStateOf(false)
+
+    // Update check
+    private var latestVersion by mutableStateOf("")
+    private var updateAvailable by mutableStateOf(false)
+    private var updateChecking by mutableStateOf(false)
+    private var updateDownloading by mutableStateOf(false)
+    private var updateProgress by mutableFloatStateOf(0f)
+    private var updateError by mutableStateOf("")
     private val schedules = mutableStateListOf(
         DaySchedule(), DaySchedule(), DaySchedule(), DaySchedule(),
         DaySchedule(), DaySchedule(), DaySchedule()
@@ -502,6 +518,7 @@ class MainActivity : ComponentActivity() {
             ServerStatusCard()
             PrinterStatusCard()
             DeviceInfoCard()
+            UpdateCard()
         }
     }
 
@@ -840,6 +857,204 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    // ── Update Card ──────────────────────────────────────────────────────
+
+    @Composable
+    private fun UpdateCard() {
+        val currentVersion = BuildConfig.VERSION_NAME
+
+        LaunchedEffect(Unit) {
+            if (latestVersion.isEmpty() && !updateChecking) {
+                checkForUpdate()
+            }
+        }
+
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.Download,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("앱 업데이트", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        "v$currentVersion",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                when {
+                    updateChecking -> {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text("최신 버전 확인 중...", fontSize = 13.sp)
+                        }
+                    }
+                    updateError.isNotEmpty() -> {
+                        Text(updateError, fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
+                        Spacer(Modifier.height(4.dp))
+                        TextButton(onClick = { checkForUpdate() }) {
+                            Text("다시 시도")
+                        }
+                    }
+                    updateDownloading -> {
+                        Text("다운로드 중... ${(updateProgress * 100).toInt()}%", fontSize = 13.sp)
+                        Spacer(Modifier.height(4.dp))
+                        @Suppress("DEPRECATION")
+                        LinearProgressIndicator(
+                            progress = updateProgress,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    updateAvailable -> {
+                        Text(
+                            "새 버전 $latestVersion 사용 가능",
+                            fontSize = 13.sp,
+                            color = Color(0xFF1565C0),
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Row {
+                            Button(onClick = { downloadAndInstallUpdate() }) {
+                                Icon(Icons.Filled.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("업데이트")
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            OutlinedButton(onClick = { checkForUpdate() }) {
+                                Text("다시 확인")
+                            }
+                        }
+                    }
+                    else -> {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Filled.CheckCircle,
+                                contentDescription = null,
+                                tint = Color(0xFF4CAF50),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text("최신 버전입니다 ($latestVersion)", fontSize = 13.sp)
+                            Spacer(Modifier.weight(1f))
+                            TextButton(onClick = { checkForUpdate() }) {
+                                Text("다시 확인")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun checkForUpdate() {
+        updateChecking = true
+        updateError = ""
+        Thread {
+            try {
+                val url = URL("https://api.github.com/repos/betona1/jp1000printer/releases/latest")
+                val conn = url.openConnection() as HttpURLConnection
+                conn.connectTimeout = 10_000
+                conn.readTimeout = 10_000
+                conn.setRequestProperty("Accept", "application/vnd.github.v3+json")
+                val json = conn.inputStream.bufferedReader().readText()
+                conn.disconnect()
+
+                val obj = JSONObject(json)
+                val tag = obj.getString("tag_name") // e.g. "v1.5.1"
+                val remote = tag.removePrefix("v")
+                val local = BuildConfig.VERSION_NAME
+
+                runOnUiThread {
+                    latestVersion = tag
+                    updateAvailable = compareVersions(remote, local) > 0
+                    updateChecking = false
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Update check failed", e)
+                runOnUiThread {
+                    updateError = "버전 확인 실패: ${e.message}"
+                    updateChecking = false
+                }
+            }
+        }.start()
+    }
+
+    private fun compareVersions(a: String, b: String): Int {
+        val pa = a.split(".").map { it.toIntOrNull() ?: 0 }
+        val pb = b.split(".").map { it.toIntOrNull() ?: 0 }
+        val len = maxOf(pa.size, pb.size)
+        for (i in 0 until len) {
+            val va = pa.getOrElse(i) { 0 }
+            val vb = pb.getOrElse(i) { 0 }
+            if (va != vb) return va.compareTo(vb)
+        }
+        return 0
+    }
+
+    private fun downloadAndInstallUpdate() {
+        updateDownloading = true
+        updateProgress = 0f
+        Thread {
+            try {
+                // Find the right asset URL for this flavor
+                val assetName = BuildConfig.APK_ASSET_NAME
+                val tag = latestVersion // e.g. "v1.5.1"
+                val downloadUrl = "https://github.com/betona1/jp1000printer/releases/download/$tag/$assetName"
+
+                val url = URL(downloadUrl)
+                val conn = url.openConnection() as HttpURLConnection
+                conn.connectTimeout = 15_000
+                conn.readTimeout = 30_000
+                conn.instanceFollowRedirects = true
+                conn.connect()
+
+                val totalBytes = conn.contentLength
+                val updateDir = getExternalFilesDir(null) ?: filesDir
+                val outFile = File(updateDir, assetName)
+
+                conn.inputStream.use { input ->
+                    FileOutputStream(outFile).use { output ->
+                        val buf = ByteArray(8192)
+                        var downloaded = 0L
+                        var len: Int
+                        while (input.read(buf).also { len = it } != -1) {
+                            output.write(buf, 0, len)
+                            downloaded += len
+                            if (totalBytes > 0) {
+                                val p = downloaded.toFloat() / totalBytes
+                                runOnUiThread { updateProgress = p }
+                            }
+                        }
+                    }
+                }
+                conn.disconnect()
+
+                runOnUiThread {
+                    updateDownloading = false
+                    installApk(outFile)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Update download failed", e)
+                runOnUiThread {
+                    updateDownloading = false
+                    updateError = "다운로드 실패: ${e.message}"
+                }
+            }
+        }.start()
     }
 
     // ══════════════════════════════════════════════════════════════════════
