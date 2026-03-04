@@ -26,6 +26,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.Settings
@@ -215,6 +216,12 @@ class LadderGameActivity : ComponentActivity() {
                             finish()
                         }) {
                             Icon(Icons.Filled.Home, contentDescription = "홈", tint = Color.White)
+                        }
+                        IconButton(onClick = {
+                            startActivity(Intent(this@LadderGameActivity, BingoGameActivity::class.java))
+                            finish()
+                        }) {
+                            Icon(Icons.Filled.GridOn, contentDescription = "빙고", tint = Color.White)
                         }
                     },
                     actions = {

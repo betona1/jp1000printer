@@ -35,6 +35,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LinearScale
 import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
@@ -310,6 +311,12 @@ class BingoGameActivity : ComponentActivity() {
                             finish()
                         }) {
                             Icon(Icons.Filled.Home, contentDescription = "홈", tint = Color.White)
+                        }
+                        IconButton(onClick = {
+                            startActivity(Intent(this@BingoGameActivity, LadderGameActivity::class.java))
+                            finish()
+                        }) {
+                            Icon(Icons.Filled.LinearScale, contentDescription = "사다리", tint = Color.White)
                         }
                     },
                     actions = {
