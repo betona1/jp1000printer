@@ -27,6 +27,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ElevatedCard
@@ -70,7 +71,11 @@ class LadderGameActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT
+        // Follow current orientation from WebPrintActivity
+        requestedOrientation = if (AppPrefs.isLandscape(this))
+            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        else
+            ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT
 
         val font = try {
             Typeface.createFromAsset(assets, "nanum_gothic.ttf")
@@ -213,6 +218,16 @@ class LadderGameActivity : ComponentActivity() {
                         }
                     },
                     actions = {
+                        IconButton(onClick = {
+                            val isLand = requestedOrientation == ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                            requestedOrientation = if (isLand)
+                                ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT
+                            else
+                                ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                            AppPrefs.setLandscape(this@LadderGameActivity, !isLand)
+                        }) {
+                            Icon(Icons.Filled.ScreenRotation, contentDescription = "회전", tint = Color.White)
+                        }
                         IconButton(onClick = {
                             startActivity(Intent(this@LadderGameActivity, MainActivity::class.java).apply {
                                 putExtra(MainActivity.EXTRA_REQUIRE_AUTH, true)

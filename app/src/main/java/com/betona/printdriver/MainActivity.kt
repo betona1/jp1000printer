@@ -432,6 +432,16 @@ class MainActivity : ComponentActivity() {
                     },
                     actions = {
                         IconButton(onClick = {
+                            val isLand = requestedOrientation == ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                            requestedOrientation = if (isLand)
+                                ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT
+                            else
+                                ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                            AppPrefs.setLandscape(this@MainActivity, !isLand)
+                        }) {
+                            Icon(Icons.Filled.ScreenRotation, contentDescription = "회전", tint = Color.White)
+                        }
+                        IconButton(onClick = {
                             val intent = Intent(this@MainActivity, WebPrintActivity::class.java)
                             intent.putExtra(WebPrintActivity.EXTRA_SCREEN_OFF_NOW, true)
                             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
