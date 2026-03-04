@@ -437,7 +437,12 @@ class MainActivity : ComponentActivity() {
         Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
-                    title = { Text("관리자 설정", fontWeight = FontWeight.Bold) },
+                    title = {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("관리자 설정", fontWeight = FontWeight.Bold)
+                            Text("v${BuildConfig.VERSION_NAME}", fontSize = 11.sp, color = Color.White.copy(alpha = 0.7f))
+                        }
+                    },
                     navigationIcon = {
                         IconButton(onClick = {
                             startActivity(Intent(this@MainActivity, WebPrintActivity::class.java))

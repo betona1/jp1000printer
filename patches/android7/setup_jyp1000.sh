@@ -112,6 +112,8 @@ adb_cmd shell "pm grant com.android.printspooler android.permission.ACCESS_COARS
 adb_cmd shell "pm grant com.android.printspooler android.permission.ACCESS_FINE_LOCATION" 2>/dev/null || true
 # WRITE_SECURE_SETTINGS: 앱이 재부팅 후 자동으로 인쇄 드라이버를 재활성화할 수 있도록
 adb_cmd shell "pm grant com.betona.printdriver android.permission.WRITE_SECURE_SETTINGS" 2>/dev/null || true
+# OTA 업데이트를 위한 앱 설치 권한 (알 수 없는 출처 허용)
+adb_cmd shell "appops set com.betona.printdriver REQUEST_INSTALL_PACKAGES allow" 2>/dev/null || true
 echo "  인쇄 드라이버 활성화 완료"
 
 # ── Step 3: 확인 ────────────────────────────────────────────────────────────

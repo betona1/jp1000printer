@@ -243,6 +243,10 @@ adb_cmd shell "settings put secure enabled_print_services com.android.printdrive
 adb_cmd shell "settings put secure disabled_print_services ''" 2>&1
 adb_cmd shell "pm grant com.android.printspooler android.permission.ACCESS_COARSE_LOCATION" 2>/dev/null || true
 adb_cmd shell "pm grant com.android.printspooler android.permission.ACCESS_FINE_LOCATION" 2>/dev/null || true
+# WRITE_SECURE_SETTINGS: 앱이 재부팅 후 자동으로 인쇄 드라이버를 재활성화할 수 있도록
+adb_cmd shell "pm grant com.android.printdriver android.permission.WRITE_SECURE_SETTINGS" 2>/dev/null || true
+# OTA 업데이트를 위한 알 수 없는 출처 앱 설치 허용
+adb_cmd shell "settings put secure install_non_market_apps 1" 2>/dev/null || true
 echo "  설정 적용 완료"
 
 # ── 완료 ──────────────────────────────────────────────────────────────────────
