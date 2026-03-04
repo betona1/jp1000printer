@@ -67,6 +67,7 @@ import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.AlertDialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
@@ -245,7 +246,8 @@ class MainActivity : ComponentActivity() {
         var isError by remember { mutableStateOf(false) }
 
         AlertDialog(
-            onDismissRequest = { finish() },
+            onDismissRequest = { /* 밖 클릭/뒤로가기 무시 — 취소 버튼 사용 */ },
+            properties = DialogProperties(dismissOnClickOutside = false),
             title = { Text("관리자 비밀번호", fontWeight = FontWeight.Bold) },
             text = {
                 OutlinedTextField(
@@ -1280,7 +1282,7 @@ class MainActivity : ComponentActivity() {
 
     private fun saveAndReschedule(dayIndex: Int) {
         AppPrefs.setDaySchedule(this, dayIndex, schedules[dayIndex])
-        PowerScheduleManager.scheduleNext(this)
+        PowerScheduleManager.scheduleNext(this, wakeIfActive = false)
     }
 
     // ══════════════════════════════════════════════════════════════════════

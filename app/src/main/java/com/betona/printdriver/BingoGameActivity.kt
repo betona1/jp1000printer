@@ -1,6 +1,7 @@
 package com.betona.printdriver
 
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.graphics.Typeface
 import android.os.Bundle
 import android.util.Log
@@ -83,6 +84,7 @@ class BingoGameActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT
 
         val font = try {
             Typeface.createFromAsset(assets, "nanum_gothic.ttf")
