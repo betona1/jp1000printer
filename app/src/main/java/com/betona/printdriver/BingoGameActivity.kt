@@ -306,17 +306,19 @@ class BingoGameActivity : ComponentActivity() {
                 CenterAlignedTopAppBar(
                     title = { Text("빙고 게임", fontWeight = FontWeight.Bold) },
                     navigationIcon = {
-                        IconButton(onClick = {
-                            startActivity(Intent(this@BingoGameActivity, WebPrintActivity::class.java))
-                            finish()
-                        }) {
-                            Icon(Icons.Filled.Home, contentDescription = "홈", tint = Color.White)
-                        }
-                        IconButton(onClick = {
-                            startActivity(Intent(this@BingoGameActivity, LadderGameActivity::class.java))
-                            finish()
-                        }) {
-                            Icon(Icons.Filled.LinearScale, contentDescription = "사다리", tint = Color.White)
+                        Row {
+                            IconButton(onClick = {
+                                startActivity(Intent(this@BingoGameActivity, WebPrintActivity::class.java))
+                                finish()
+                            }) {
+                                Icon(Icons.Filled.Home, contentDescription = "홈", tint = Color.White)
+                            }
+                            IconButton(onClick = {
+                                startActivity(Intent(this@BingoGameActivity, LadderGameActivity::class.java))
+                                finish()
+                            }) {
+                                Icon(Icons.Filled.LinearScale, contentDescription = "사다리", tint = Color.White)
+                            }
                         }
                     },
                     actions = {

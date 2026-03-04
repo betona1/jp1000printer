@@ -211,17 +211,19 @@ class LadderGameActivity : ComponentActivity() {
                 CenterAlignedTopAppBar(
                     title = { Text("사다리 게임", fontWeight = FontWeight.Bold) },
                     navigationIcon = {
-                        IconButton(onClick = {
-                            startActivity(Intent(this@LadderGameActivity, WebPrintActivity::class.java))
-                            finish()
-                        }) {
-                            Icon(Icons.Filled.Home, contentDescription = "홈", tint = Color.White)
-                        }
-                        IconButton(onClick = {
-                            startActivity(Intent(this@LadderGameActivity, BingoGameActivity::class.java))
-                            finish()
-                        }) {
-                            Icon(Icons.Filled.GridOn, contentDescription = "빙고", tint = Color.White)
+                        Row {
+                            IconButton(onClick = {
+                                startActivity(Intent(this@LadderGameActivity, WebPrintActivity::class.java))
+                                finish()
+                            }) {
+                                Icon(Icons.Filled.Home, contentDescription = "홈", tint = Color.White)
+                            }
+                            IconButton(onClick = {
+                                startActivity(Intent(this@LadderGameActivity, BingoGameActivity::class.java))
+                                finish()
+                            }) {
+                                Icon(Icons.Filled.GridOn, contentDescription = "빙고", tint = Color.White)
+                            }
                         }
                     },
                     actions = {
