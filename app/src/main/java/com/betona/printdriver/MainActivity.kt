@@ -100,7 +100,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
+
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
@@ -270,7 +270,6 @@ class MainActivity : ComponentActivity() {
                     singleLine = true,
                     isError = isError,
                     supportingText = if (isError) {{ Text("비밀번호가 틀렸습니다", color = MaterialTheme.colorScheme.error) }} else null,
-                    visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -319,7 +318,6 @@ class MainActivity : ComponentActivity() {
                         onValueChange = { newPassword = it; errorMsg = "" },
                         label = { Text("새 비밀번호") },
                         singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -329,7 +327,6 @@ class MainActivity : ComponentActivity() {
                         onValueChange = { confirmPassword = it; errorMsg = "" },
                         label = { Text("비밀번호 확인") },
                         singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -372,7 +369,6 @@ class MainActivity : ComponentActivity() {
                         onValueChange = { currentPassword = it; errorMsg = "" },
                         label = { Text("현재 비밀번호") },
                         singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -382,7 +378,6 @@ class MainActivity : ComponentActivity() {
                         onValueChange = { newPassword = it; errorMsg = "" },
                         label = { Text("새 비밀번호") },
                         singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -392,7 +387,6 @@ class MainActivity : ComponentActivity() {
                         onValueChange = { confirmPassword = it; errorMsg = "" },
                         label = { Text("비밀번호 확인") },
                         singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                         modifier = Modifier.fillMaxWidth()
                     )
