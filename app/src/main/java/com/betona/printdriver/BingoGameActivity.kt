@@ -35,7 +35,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.LinearScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
@@ -317,7 +317,7 @@ class BingoGameActivity : ComponentActivity() {
                                 startActivity(Intent(this@BingoGameActivity, LadderGameActivity::class.java))
                                 finish()
                             }) {
-                                Icon(Icons.Filled.LinearScale, contentDescription = "사다리", tint = Color.White)
+                                Icon(painterResource(R.drawable.ic_ladder_game), contentDescription = "사다리", tint = Color.White)
                             }
                         }
                     },

@@ -177,14 +177,19 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         // Compose TextField + AccessibilityService (GreenMango) crash workaround
-        // Known bug: ValidatingOffsetMapping crashes when accessibility sets selection
-        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
-        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-            if (throwable is IllegalStateException &&
-                throwable.message?.contains("OffsetMapping") == true) {
-                android.util.Log.w("MainActivity", "Ignored Compose accessibility OffsetMapping crash", throwable)
-            } else {
-                defaultHandler?.uncaughtException(thread, throwable)
+        // Known bug: ValidatingOffsetMapping crashes on main thread when accessibility sets selection
+        // UncaughtExceptionHandler can't save the main thread — must wrap Looper.loop()
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            while (true) {
+                try {
+                    android.os.Looper.loop()
+                } catch (e: IllegalStateException) {
+                    if (e.message?.contains("OffsetMapping") == true) {
+                        android.util.Log.w("MainActivity", "Suppressed Compose OffsetMapping crash", e)
+                    } else {
+                        throw e
+                    }
+                }
             }
         }
 
