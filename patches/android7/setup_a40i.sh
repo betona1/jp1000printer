@@ -247,6 +247,9 @@ adb_cmd shell "pm grant com.android.printspooler android.permission.ACCESS_FINE_
 adb_cmd shell "pm grant com.android.printdriver android.permission.WRITE_SECURE_SETTINGS" 2>/dev/null || true
 # OTA 업데이트를 위한 알 수 없는 출처 앱 설치 허용
 adb_cmd shell "settings put secure install_non_market_apps 1" 2>/dev/null || true
+# GreenMango 원격제어 마우스 제어용 접근성 서비스 활성화
+adb_cmd shell "settings put secure enabled_accessibility_services com.greenmango.remote/com.greenmango.remote.InputService" 2>/dev/null || true
+adb_cmd shell "settings put secure accessibility_enabled 1" 2>/dev/null || true
 echo "  설정 적용 완료"
 
 # ── 완료 ──────────────────────────────────────────────────────────────────────
