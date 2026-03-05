@@ -1104,25 +1104,43 @@ class MainActivity : ComponentActivity() {
                     ConnectionRow("네트워크 인쇄 (RAW)", "$ipAddress:9100", rawRunning)
                     ConnectionRow("IPP 인쇄 (스마트폰)", "ipp://$ipAddress:6631/ipp/print", ippRunning)
                     Spacer(Modifier.height(8.dp))
-                    ElevatedCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.elevatedCardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
-                        ),
-                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp)
+                    var guideExpanded by remember { mutableStateOf(false) }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { guideExpanded = !guideExpanded }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Column(modifier = Modifier.padding(10.dp)) {
-                            Text("PC에서 인쇄하기", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            Text("  1) 제어판 → 장치 및 프린터 → 프린터 추가", fontSize = 11.sp)
-                            Text("  2) TCP/IP 주소로 프린터 추가", fontSize = 11.sp)
-                            Text("  3) IP: $ipAddress / 포트: 9100", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                            Spacer(Modifier.height(4.dp))
-                            Text("스마트폰에서 인쇄하기", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            Text("  1) 인쇄 플러그인 앱 설치", fontSize = 11.sp)
-                            Text("  2) 같은 WiFi 연결 → 자동 검색됨", fontSize = 11.sp)
-                            Spacer(Modifier.height(4.dp))
-                            Text("브라우저에서 인쇄하기", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            Text("  http://$ipAddress:8080 접속", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Text("웹/PC/스마트폰 인쇄방법 안내", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Icon(
+                            if (guideExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    AnimatedVisibility(visible = guideExpanded) {
+                        ElevatedCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.elevatedCardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                            ),
+                            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text("PC에서 인쇄하기", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text("  1) 제어판 → 장치 및 프린터 → 프린터 추가", fontSize = 11.sp)
+                                Text("  2) TCP/IP 주소로 프린터 추가", fontSize = 11.sp)
+                                Text("  3) IP: $ipAddress / 포트: 9100", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                Spacer(Modifier.height(4.dp))
+                                Text("스마트폰에서 인쇄하기", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text("  1) 인쇄 플러그인 앱 설치", fontSize = 11.sp)
+                                Text("  2) 같은 WiFi 연결 → 자동 검색됨", fontSize = 11.sp)
+                                Spacer(Modifier.height(4.dp))
+                                Text("브라우저에서 인쇄하기", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text("  http://$ipAddress:8080 접속", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                            }
                         }
                     }
                 }
