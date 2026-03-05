@@ -176,6 +176,18 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Compose TextField + AccessibilityService (GreenMango) crash workaround
+        // Known bug: ValidatingOffsetMapping crashes when accessibility sets selection
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            if (throwable is IllegalStateException &&
+                throwable.message?.contains("OffsetMapping") == true) {
+                android.util.Log.w("MainActivity", "Ignored Compose accessibility OffsetMapping crash", throwable)
+            } else {
+                defaultHandler?.uncaughtException(thread, throwable)
+            }
+        }
+
         // Preserve orientation from WebPrintActivity (fixes Android 7 orientation reset)
         requestedOrientation = if (AppPrefs.isLandscape(this))
             ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
