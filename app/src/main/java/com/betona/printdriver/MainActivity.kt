@@ -30,6 +30,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -1415,6 +1416,20 @@ class MainActivity : ComponentActivity() {
                 }
                 AnimatedVisibility(visible = expanded) {
                     Column(modifier = Modifier.padding(top = 8.dp)) {
+                        // 일괄설정 버튼
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            OutlinedButton(
+                                onClick = { showBatchScheduleDialog() },
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                            ) {
+                                Icon(Icons.Filled.Schedule, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("일괄설정", fontSize = 12.sp)
+                            }
+                        }
                         dayNames.forEachIndexed { index, name ->
                             ScheduleRow(index, name)
                         }
@@ -1479,6 +1494,34 @@ class MainActivity : ComponentActivity() {
                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                 )
             }
+        }
+    }
+
+    private fun showBatchScheduleDialog() {
+        // 1단계: 시작 시간 선택
+        TimePickerDialog(this, { _, startH, startM ->
+            // 2단계: 종료 시간 선택
+            TimePickerDialog(this, { _, endH, endM ->
+                // 월~일 전체 적용
+                for (i in 0..6) {
+                    schedules[i] = DaySchedule(
+                        enabled = true,
+                        startHour = startH, startMin = startM,
+                        endHour = endH, endMin = endM
+                    )
+                    AppPrefs.setDaySchedule(this, i, schedules[i])
+                }
+                PowerScheduleManager.scheduleNext(this, wakeIfActive = false)
+                android.widget.Toast.makeText(this,
+                    String.format("월~일 %02d:%02d~%02d:%02d 일괄 적용", startH, startM, endH, endM),
+                    android.widget.Toast.LENGTH_SHORT).show()
+            }, schedules[0].endHour, schedules[0].endMin, true).apply {
+                setTitle("종료 시간")
+                show()
+            }
+        }, schedules[0].startHour, schedules[0].startMin, true).apply {
+            setTitle("시작 시간")
+            show()
         }
     }
 
