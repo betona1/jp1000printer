@@ -99,6 +99,11 @@ class WebPrintActivity : AppCompatActivity() {
         // Auto-enable PrintService (gets disabled on app reinstall)
         enablePrintService()
 
+        // Android 7: re-bind GreenMango accessibility service (toggle off→on)
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) {
+            fixAccessibilityService()
+        }
+
         // Re-register schedule alarms (lost after force-stop/reinstall)
         PowerScheduleManager.scheduleNext(this)
 
@@ -610,6 +615,28 @@ class WebPrintActivity : AppCompatActivity() {
                 android.net.Uri.parse("package:$packageName")
             ))
         }
+    }
+
+    /** Android 7: toggle accessibility off→on to force GreenMango InputService bind */
+    private fun fixAccessibilityService() {
+        Thread {
+            try {
+                val svc = "com.greenmango.remote/com.greenmango.remote.InputService"
+                val cmds = arrayOf(
+                    "settings put secure enabled_accessibility_services ''",
+                    "settings put secure accessibility_enabled 0",
+                    "sleep 1",
+                    "settings put secure enabled_accessibility_services $svc",
+                    "settings put secure accessibility_enabled 1",
+                    "settings put secure high_text_contrast_enabled 0"
+                )
+                val p = Runtime.getRuntime().exec(arrayOf("sh", "-c", cmds.joinToString(" && ")))
+                p.waitFor()
+                Log.d(TAG, "Accessibility service re-bound: $svc")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to fix accessibility service", e)
+            }
+        }.start()
     }
 
     /** Auto-enable PrintService — reinstall disables it */
