@@ -31,6 +31,7 @@ object AppPrefs {
     private const val KEY_NIGHT_SAVE_START_M = "night_save_start_m"
     private const val KEY_NIGHT_SAVE_END_H = "night_save_end_h"
     private const val KEY_NIGHT_SAVE_END_M = "night_save_end_m"
+    private const val KEY_SETUP_GUIDE_DISMISSED = "setup_guide_dismissed"
     private const val DEFAULT_SCHOOL_URL = "https://read365.edunet.net/SchoolSearch"
     private const val DEFAULT_PASSWORD = "1234"
 
@@ -283,6 +284,18 @@ object AppPrefs {
         val startMin = sh * 60 + sm
         val endMin = eh * 60 + em
         return nowMin in startMin until endMin
+    }
+
+    // ── Setup Guide ───────────────────────────────────────────────────
+
+    fun isSetupGuideDismissed(context: Context): Boolean {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_SETUP_GUIDE_DISMISSED, false)
+    }
+
+    fun setSetupGuideDismissed(context: Context, dismissed: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_SETUP_GUIDE_DISMISSED, dismissed).apply()
     }
 
     // ── Schedule ──────────────────────────────────────────────────────

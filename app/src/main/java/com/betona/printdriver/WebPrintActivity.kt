@@ -15,6 +15,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+import android.provider.Settings
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebView
@@ -306,6 +307,15 @@ class WebPrintActivity : AppCompatActivity() {
         }
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
+        // Setup guide for remote install (no adb)
+        val setupDismissed = AppPrefs.isSetupGuideDismissed(this)
+        val printEnabled = isPrintServiceEnabled()
+        if (!setupDismissed && (!printEnabled || !canInstallPackages())) {
+            showSetupGuide()
+        } else if (setupDismissed && !printEnabled) {
+            showPrintServiceReminder()
+        }
+
         // Apply UA mode (may have changed in admin settings)
         val newUa = if (AppPrefs.isMobileMode(this)) MOBILE_UA else DESKTOP_UA
         if (webView.settings.userAgentString != newUa) {
@@ -521,6 +531,85 @@ class WebPrintActivity : AppCompatActivity() {
             }
             .setCancelable(false)
             .show()
+    }
+
+    // ── Setup Guide (remote install without adb) ──────────────────────
+
+    private fun isPrintServiceEnabled(): Boolean {
+        return try {
+            val services = Settings.Secure.getString(contentResolver, "enabled_print_services") ?: ""
+            services.contains(packageName)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun canInstallPackages(): Boolean {
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            packageManager.canRequestPackageInstalls()
+        } else {
+            true // Android 7 uses install_non_market_apps (handled by setup script)
+        }
+    }
+
+    private fun showSetupGuide() {
+        if (isFinishing || isDestroyed) return
+        val printEnabled = isPrintServiceEnabled()
+        val installEnabled = canInstallPackages()
+
+        val msg = buildString {
+            append("원격 설치를 완료하려면 아래 설정을 켜주세요:\n\n")
+            append(if (printEnabled) "\u2705" else "\u274C")
+            append(" 인쇄 서비스 (LibroPrinter)\n")
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                append(if (installEnabled) "\u2705" else "\u274C")
+                append(" 출처를 알 수 없는 앱 설치 허용\n")
+            }
+        }
+
+        val builder = AlertDialog.Builder(this)
+            .setTitle("초기 설정")
+            .setMessage(msg)
+            .setCancelable(false)
+
+        if (!printEnabled) {
+            builder.setPositiveButton("인쇄 설정 열기") { _, _ ->
+                startActivity(Intent(Settings.ACTION_PRINT_SETTINGS))
+            }
+        }
+
+        if (!installEnabled && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            builder.setNeutralButton("설치 권한 열기") { _, _ ->
+                openInstallPermissionSettings()
+            }
+        }
+
+        builder.setNegativeButton("나중에") { _, _ ->
+            AppPrefs.setSetupGuideDismissed(this, true)
+        }
+
+        builder.show()
+    }
+
+    private fun showPrintServiceReminder() {
+        if (isFinishing || isDestroyed) return
+        AlertDialog.Builder(this)
+            .setTitle("인쇄 드라이버 꺼짐")
+            .setMessage("인쇄 서비스(LibroPrinter)가 비활성화 상태입니다.\n설정에서 켜주세요.")
+            .setPositiveButton("설정 열기") { _, _ ->
+                startActivity(Intent(Settings.ACTION_PRINT_SETTINGS))
+            }
+            .setNegativeButton("닫기", null)
+            .show()
+    }
+
+    private fun openInstallPermissionSettings() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            startActivity(Intent(
+                Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                android.net.Uri.parse("package:$packageName")
+            ))
+        }
     }
 
     /** Auto-enable PrintService — reinstall disables it */
