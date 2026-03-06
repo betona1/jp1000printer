@@ -214,6 +214,15 @@ class WebPrintActivity : AppCompatActivity() {
                 // Override 인기도서 TOP 10 swiper to vertical grid (setting-dependent)
                 if (AppPrefs.isTopBookGrid(this@WebPrintActivity) &&
                     (url?.contains("SchoolSearch") == true || url?.contains("PureScreen") == true)) {
+                    // A40i (landscape display): portrait=3cols, landscape=4cols
+                    // JY-P1000 (REVERSE_PORTRAIT): CSS orientation swapped — portrait=2cols(physical landscape), landscape=3cols(physical portrait)
+                    val gridCss = if (BuildConfig.FLAVOR == "a40") {
+                        "@media (orientation: portrait) { .top-book-list .swiper-slide { width: 30% !important; margin: 0 1.5% 16px !important; } }" +
+                        "@media (orientation: landscape) { .top-book-list .swiper-slide { width: 23% !important; margin: 0 1% 16px !important; } }"
+                    } else {
+                        "@media (orientation: portrait) { .top-book-list .swiper-slide { width: 48% !important; margin: 0 1% 16px !important; } }" +
+                        "@media (orientation: landscape) { .top-book-list .swiper-slide { width: 30% !important; margin: 0 1.5% 16px !important; } }"
+                    }
                     view?.evaluateJavascript("""
                         (function() {
                             var s = document.getElementById('libro-top-book-grid');
@@ -223,8 +232,7 @@ class WebPrintActivity : AppCompatActivity() {
                             s.textContent = ''
                                 + '.top-book-list .swiper-wrapper { display: flex !important; flex-wrap: wrap !important; transform: none !important; justify-content: flex-start !important; }'
                                 + '.top-book-list .swiper { overflow: visible !important; }'
-                                + '@media (orientation: portrait) { .top-book-list .swiper-slide { width: 48% !important; margin: 0 1% 16px !important; } }'
-                                + '@media (orientation: landscape) { .top-book-list .swiper-slide { width: 30% !important; margin: 0 1.5% 16px !important; } }';
+                                + '$gridCss';
                             document.head.appendChild(s);
                         })();
                     """.trimIndent(), null)
