@@ -426,6 +426,42 @@ adb shell ip addr show
 adb shell netstat -tlnp | grep -E "8080|6631|9100"
 ```
 
+### Windows USB 드라이버 문제 (A40i 인식 불가)
+
+**증상**: A40i가 장치 관리자에서 보이지만 `adb devices`에 안 나옴
+
+**원인**: PhoenixSuit(Allwinner 펌웨어 도구)가 설치한 구 드라이버 `AndroidUsbDeviceClass` (2013년, v7.0.0.1)가 최신 adb와 호환되지 않음
+
+**해결**:
+```bash
+# 1. 구 드라이버 강제 제거 (관리자 권한)
+powershell -NoProfile -Command "pnputil /remove-device 'USB\VID_1F3A&PID_1007\20080411'"
+powershell -NoProfile -Command "pnputil /delete-driver oem31.inf /uninstall /force"
+
+# 2. Google USB Driver r13 설치
+pnputil -a "C:\Users\user\Downloads\usb_driver\android_winusb.inf"
+
+# 3. USB 케이블 뽑았다 다시 꽂기 → WinUsb 드라이버로 자동 매칭
+adb devices -l
+```
+
+**드라이버 파일 위치**:
+
+| 드라이버 | 경로 | 버전 | 비고 |
+|----------|------|------|------|
+| Google USB Driver r13 (정상) | `Downloads/usb_driver_working/` | 10.0.19041.1 (WinUsb) | S드라이브에도 복사됨 |
+| PhoenixSuit 구 드라이버 (백업) | `Downloads/usb_driver_backup/` | 7.0.0.1 (oem31.inf, 2013) | **사용 금지** |
+| S드라이브 배포용 | `S:/00000000모바일기기유지보수용/usb_driver/` | Google r13 | 새 PC 설치용 |
+
+**현재 정상 동작 드라이버 정보**:
+
+| 기기 | VID:PID | 드라이버 | 클래스 |
+|------|---------|----------|--------|
+| JY-P1000 (Android 11) | `2207:0006` | WinUsb (winusb.inf) | USBDEVICE |
+| A40i (Android 7) | `1F3A:1007` | WinUsb (winusb.inf) | USBDEVICE |
+
+> **주의**: PhoenixSuit를 설치하면 구 Allwinner 드라이버가 자동 설치되어 A40i의 ADB 연결이 깨집니다. PhoenixSuit 사용 후 반드시 위 절차로 드라이버를 복원하세요.
+
 ### adb 연결 안됨 / server conflict
 
 **증상**: `adb devices`가 빈 목록이거나 `error: cannot connect to daemon`
