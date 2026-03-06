@@ -33,6 +33,7 @@ object AppPrefs {
     private const val KEY_NIGHT_SAVE_END_M = "night_save_end_m"
     private const val KEY_SETUP_GUIDE_DISMISSED = "setup_guide_dismissed"
     private const val KEY_TOP_BOOK_GRID = "top_book_grid"
+    private const val KEY_PRINT_DRIVER_HIDDEN = "print_driver_hidden"
     private const val DEFAULT_SCHOOL_URL = "https://read365.edunet.net/SchoolSearch"
     private const val DEFAULT_PASSWORD = "1234"
 
@@ -297,6 +298,18 @@ object AppPrefs {
     fun setSetupGuideDismissed(context: Context, dismissed: Boolean) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit().putBoolean(KEY_SETUP_GUIDE_DISMISSED, dismissed).apply()
+    }
+
+    // ── Print Driver Hidden ────────────────────────────────────────
+
+    fun isPrintDriverHidden(context: Context): Boolean {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_PRINT_DRIVER_HIDDEN, false)
+    }
+
+    fun setPrintDriverHidden(context: Context, hidden: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_PRINT_DRIVER_HIDDEN, hidden).apply()
     }
 
     // ── Top Book Grid ───────────────────────────────────────────────

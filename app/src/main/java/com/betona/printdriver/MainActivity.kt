@@ -767,7 +767,7 @@ class MainActivity : ComponentActivity() {
             val enabled = Settings.Secure.getString(contentResolver, "enabled_print_services") ?: ""
             mutableStateOf(enabled.contains("LibroPrintService"))
         }
-        var printDriverHidden by remember { mutableStateOf(false) }
+        var printDriverHidden by remember { mutableStateOf(AppPrefs.isPrintDriverHidden(this@MainActivity)) }
 
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
@@ -822,6 +822,7 @@ class MainActivity : ComponentActivity() {
                                         .setMessage("인쇄가 잘 되면 이 버튼을 숨기겠습니다.")
                                         .setPositiveButton("확인") { _, _ ->
                                             printDriverHidden = true
+                                            AppPrefs.setPrintDriverHidden(this@MainActivity, true)
                                         }
                                         .setNegativeButton("취소", null)
                                         .show()
