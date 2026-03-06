@@ -99,9 +99,10 @@ class WebPrintActivity : AppCompatActivity() {
         // Auto-enable PrintService (gets disabled on app reinstall)
         enablePrintService()
 
-        // Android 7: re-bind GreenMango accessibility service (toggle off→on)
+        // Android 7: bind GreenMango accessibility + start watchdog (rebinds if it drops)
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) {
             fixAccessibilityService()
+            accessibilityWatchdog.postDelayed(accessibilityCheckRunnable, 60_000L)
         }
 
         // Re-register schedule alarms (lost after force-stop/reinstall)
@@ -312,13 +313,10 @@ class WebPrintActivity : AppCompatActivity() {
         }
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
-        // Setup guide for remote install (no adb)
+        // Setup guide for remote install (no adb) — only on first launch
         val setupDismissed = AppPrefs.isSetupGuideDismissed(this)
-        val printEnabled = isPrintServiceEnabled()
-        if (!setupDismissed && (!printEnabled || !canInstallPackages())) {
+        if (!setupDismissed && (!isPrintServiceEnabled() || !canInstallPackages())) {
             showSetupGuide()
-        } else if (setupDismissed && !printEnabled) {
-            showPrintServiceReminder()
         }
 
         // Apply UA mode (may have changed in admin settings)
@@ -617,18 +615,47 @@ class WebPrintActivity : AppCompatActivity() {
         }
     }
 
-    /** Android 7: toggle accessibility off→on to force GreenMango InputService bind */
+    // Android 7: watchdog — check every 60s, rebind if accessibility service is unbound
+    private val accessibilityWatchdog = Handler(Looper.getMainLooper())
+    private val accessibilityCheckRunnable = object : Runnable {
+        override fun run() {
+            if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) {
+                if (!isAccessibilityServiceBound()) {
+                    Log.w(TAG, "Accessibility service unbound — rebinding...")
+                    fixAccessibilityService()
+                }
+                accessibilityWatchdog.postDelayed(this, 60_000L)
+            }
+        }
+    }
+
+    private fun isAccessibilityServiceBound(): Boolean {
+        return try {
+            // Settings value alone is unreliable — check actual bound service via dumpsys
+            val p = Runtime.getRuntime().exec(arrayOf("sh", "-c", "dumpsys accessibility"))
+            val output = p.inputStream.bufferedReader().readText()
+            p.waitFor()
+            output.contains("GreenMango") && output.contains("services:{Service[")
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /** Android 7: start GreenMango activity + toggle accessibility off→on to force bind */
     private fun fixAccessibilityService() {
         Thread {
             try {
                 val svc = "com.greenmango.remote/com.greenmango.remote.InputService"
                 val cmds = arrayOf(
+                    "am start -n com.greenmango.remote/.MainActivity",
+                    "sleep 2",
                     "settings put secure enabled_accessibility_services ''",
                     "settings put secure accessibility_enabled 0",
                     "sleep 1",
                     "settings put secure enabled_accessibility_services $svc",
                     "settings put secure accessibility_enabled 1",
-                    "settings put secure high_text_contrast_enabled 0"
+                    "settings put secure high_text_contrast_enabled 0",
+                    "settings put system kill_background_services 0"
                 )
                 val p = Runtime.getRuntime().exec(arrayOf("sh", "-c", cmds.joinToString(" && ")))
                 p.waitFor()
