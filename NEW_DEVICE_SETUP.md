@@ -39,6 +39,7 @@ bash setup_jyp1000.sh -r                 # 설치 후 자동 재부팅
    - `enabled_print_services` 설정
    - PrintSpooler 위치 권한 부여
    - **`WRITE_SECURE_SETTINGS` 권한 부여** (재부팅 후 자동 복원용)
+   - **OTA 업데이트 허용** (`REQUEST_INSTALL_PACKAGES`)
 4. 설치 확인
 
 **필요 파일**: `app-standard-release.apk` (또는 debug), `adb.exe` (PATH 또는 같은 폴더)
@@ -72,7 +73,13 @@ adb shell pm grant com.android.printspooler android.permission.ACCESS_FINE_LOCAT
 
 # ★ 재부팅 후 자동 복원을 위한 권한 (중요!)
 adb shell pm grant com.betona.printdriver android.permission.WRITE_SECURE_SETTINGS
+
+# OTA 업데이트 허용 (출처를 알 수 없는 앱 설치)
+adb shell appops set com.betona.printdriver REQUEST_INSTALL_PACKAGES allow
 ```
+
+> **v1.6.0+**: `WRITE_SECURE_SETTINGS` 권한이 없어도 관리자 페이지에서 "인쇄 드라이버 활성화"
+> 버튼으로 활성화 시도 가능. 권한 부족 시 사용자 확인으로 상태 표시를 숨길 수 있음.
 
 > **`WRITE_SECURE_SETTINGS` 설명**: Android 11에는 `su`가 없어서 부트 스크립트로
 > 설정을 복원할 수 없습니다. 대신 이 권한을 부여하면 앱의 `BootCompletedReceiver`가
@@ -322,6 +329,10 @@ adb shell settings put secure enabled_print_services com.android.printdriver/com
 # === 재부팅 후 자동 복원 권한 (JY-P1000 / Android 11) ===
 adb shell pm grant com.betona.printdriver android.permission.WRITE_SECURE_SETTINGS
 
+# === OTA 업데이트 허용 ===
+adb shell appops set com.betona.printdriver REQUEST_INSTALL_PACKAGES allow    # JY-P1000
+adb shell settings put secure install_non_market_apps 1                        # A40i
+
 # === 기기 IP 확인 ===
 adb -s <시리얼> shell ip addr show | grep "inet "
 
@@ -431,6 +442,14 @@ adb devices -l
 # Git Bash
 taskkill //F //IM adb.exe
 ```
+
+### 원격 설치 (GreenMango) 시 인쇄 드라이버 활성화
+
+adb 없이 GreenMango 원격제어로 설치한 경우:
+1. 앱 초기 실행 시 "초기 설정" 다이얼로그가 표시됨
+2. "인쇄 설정 열기" → 시스템 설정에서 LibroPrinter 토글 ON
+3. 관리자 페이지의 "인쇄 드라이버 활성화" 버튼으로도 시도 가능
+4. `WRITE_SECURE_SETTINGS` 없으면 "인쇄가 잘 되면 버튼을 숨기겠습니다" 확인 후 숨김
 
 ### /dev/printer가 없음
 
