@@ -203,7 +203,6 @@ class WebPrintActivity : AppCompatActivity() {
                     shouldClearHistory = false
                     Log.d(TAG, "Home URL resolved: ${view?.url}")
                 }
-                // Print button always enabled (cut mode selector)
                 // Fix select element styling for older WebView (v83 renders wavy borders)
                 view?.evaluateJavascript("""
                     (function() {
@@ -212,6 +211,24 @@ class WebPrintActivity : AppCompatActivity() {
                         document.head.appendChild(style);
                     })();
                 """.trimIndent(), null)
+                // Override 인기도서 TOP 10 swiper to vertical grid (setting-dependent)
+                if (AppPrefs.isTopBookGrid(this@WebPrintActivity) &&
+                    (url?.contains("SchoolSearch") == true || url?.contains("PureScreen") == true)) {
+                    view?.evaluateJavascript("""
+                        (function() {
+                            var s = document.getElementById('libro-top-book-grid');
+                            if (s) s.remove();
+                            s = document.createElement('style');
+                            s.id = 'libro-top-book-grid';
+                            s.textContent = ''
+                                + '.top-book-list .swiper-wrapper { display: flex !important; flex-wrap: wrap !important; transform: none !important; justify-content: flex-start !important; }'
+                                + '.top-book-list .swiper { overflow: visible !important; }'
+                                + '@media (orientation: portrait) { .top-book-list .swiper-slide { width: 48% !important; margin: 0 1% 16px !important; } }'
+                                + '@media (orientation: landscape) { .top-book-list .swiper-slide { width: 30% !important; margin: 0 1.5% 16px !important; } }';
+                            document.head.appendChild(s);
+                        })();
+                    """.trimIndent(), null)
+                }
                 // Override window.open to capture print HTML, override window.print
                 view?.evaluateJavascript("""
                     (function() {

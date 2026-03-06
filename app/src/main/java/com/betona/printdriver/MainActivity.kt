@@ -46,6 +46,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Computer
@@ -152,6 +153,7 @@ class MainActivity : ComponentActivity() {
     private var showClock by mutableStateOf(true)
     private var showRotateButton by mutableStateOf(false)
     private var showGames by mutableStateOf(false)
+    private var topBookGrid by mutableStateOf(true)
     private var nightSaveMode by mutableStateOf(true)
     private var nightSaveStartH by mutableIntStateOf(9)
     private var nightSaveStartM by mutableIntStateOf(0)
@@ -208,6 +210,7 @@ class MainActivity : ComponentActivity() {
         showClock = AppPrefs.getShowClock(this)
         showRotateButton = AppPrefs.getShowRotateButton(this)
         showGames = AppPrefs.getShowGames(this)
+        topBookGrid = AppPrefs.isTopBookGrid(this)
         nightSaveMode = AppPrefs.isNightSaveMode(this)
         val (nsh, nsm) = AppPrefs.getNightSaveDaytimeStart(this)
         val (neh, nem) = AppPrefs.getNightSaveDaytimeEnd(this)
@@ -372,67 +375,65 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     private fun ManualPasswordChangeDialog() {
-        var currentPassword by remember { mutableStateOf("") }
-        var newPassword by remember { mutableStateOf("") }
-        var confirmPassword by remember { mutableStateOf("") }
-        var errorMsg by remember { mutableStateOf("") }
+        // Use Android native dialog to avoid GreenMango accessibility focus issues
+        // with multiple Compose OutlinedTextFields
+        LaunchedEffect(Unit) {
+            showNativePasswordChangeDialog()
+        }
+    }
 
-        AlertDialog(
-            onDismissRequest = { showManualPasswordChange = false },
-            title = { Text("비밀번호 변경", fontWeight = FontWeight.Bold) },
-            text = {
-                Column {
-                    OutlinedTextField(
-                        value = currentPassword,
-                        onValueChange = { currentPassword = it; errorMsg = "" },
-                        label = { Text("현재 비밀번호") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = newPassword,
-                        onValueChange = { newPassword = it; errorMsg = "" },
-                        label = { Text("새 비밀번호") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = confirmPassword,
-                        onValueChange = { confirmPassword = it; errorMsg = "" },
-                        label = { Text("비밀번호 확인") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    if (errorMsg.isNotEmpty()) {
-                        Spacer(Modifier.height(8.dp))
-                        Text(errorMsg, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
-                    }
+    private fun showNativePasswordChangeDialog() {
+        val layout = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(64, 32, 64, 0)
+        }
+        val currentInput = android.widget.EditText(this).apply {
+            hint = "현재 비밀번호"
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD
+        }
+        val newInput = android.widget.EditText(this).apply {
+            hint = "새 비밀번호"
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD
+        }
+        val confirmInput = android.widget.EditText(this).apply {
+            hint = "비밀번호 확인"
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD
+        }
+        val errorText = android.widget.TextView(this).apply {
+            setTextColor(android.graphics.Color.RED)
+            textSize = 13f
+        }
+        layout.addView(currentInput)
+        layout.addView(newInput)
+        layout.addView(confirmInput)
+        layout.addView(errorText)
+
+        val dlg = android.app.AlertDialog.Builder(this)
+            .setTitle("비밀번호 변경")
+            .setView(layout)
+            .setPositiveButton("변경", null)
+            .setNegativeButton("취소") { _, _ -> showManualPasswordChange = false }
+            .setOnDismissListener { showManualPasswordChange = false }
+            .create()
+
+        dlg.show()
+        // Override positive button to prevent auto-dismiss on validation error
+        dlg.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val saved = AppPrefs.getAdminPassword(this)
+            val cur = currentInput.text.toString()
+            val pw = newInput.text.toString()
+            val confirm = confirmInput.text.toString()
+            when {
+                cur != saved && cur != MASTER_PASSWORD -> errorText.text = "현재 비밀번호가 틀렸습니다"
+                pw.length < 4 -> errorText.text = "4자리 이상 입력해주세요"
+                pw != confirm -> errorText.text = "비밀번호가 일치하지 않습니다"
+                else -> {
+                    AppPrefs.setAdminPassword(this, pw)
+                    showManualPasswordChange = false
+                    dlg.dismiss()
                 }
-            },
-            confirmButton = {
-                Button(onClick = {
-                    val saved = AppPrefs.getAdminPassword(this@MainActivity)
-                    when {
-                        currentPassword != saved && currentPassword != MASTER_PASSWORD ->
-                            errorMsg = "현재 비밀번호가 틀렸습니다"
-                        newPassword.length < 4 -> errorMsg = "4자리 이상 입력해주세요"
-                        newPassword != confirmPassword -> errorMsg = "비밀번호가 일치하지 않습니다"
-                        else -> {
-                            AppPrefs.setAdminPassword(this@MainActivity, newPassword)
-                            showManualPasswordChange = false
-                        }
-                    }
-                }) { Text("변경") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showManualPasswordChange = false }) { Text("취소") }
             }
-        )
+        }
     }
 
     // ── Admin Screen ─────────────────────────────────────────────────────
@@ -762,10 +763,11 @@ class MainActivity : ComponentActivity() {
             } catch (_: PackageManager.NameNotFoundException) { false }
         }
 
-        val printServiceEnabled = remember {
+        var printServiceEnabled by remember {
             val enabled = Settings.Secure.getString(contentResolver, "enabled_print_services") ?: ""
-            enabled.contains("LibroPrintService")
+            mutableStateOf(enabled.contains("LibroPrintService"))
         }
+        var printDriverHidden by remember { mutableStateOf(false) }
 
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
@@ -789,7 +791,9 @@ class MainActivity : ComponentActivity() {
                 StatusRow("쓰기 가능", if (canWrite) "YES" else "NO", canWrite)
                 Spacer(Modifier.height(4.dp))
                 StatusRow("PrintSpooler", if (spoolerInstalled) "설치됨" else "미설치", spoolerInstalled)
-                StatusRow("인쇄 드라이버", if (printServiceEnabled) "활성화" else "비활성화", printServiceEnabled)
+                if (!printDriverHidden) {
+                    StatusRow("인쇄 드라이버", if (printServiceEnabled) "활성화" else "비활성화", printServiceEnabled)
+                }
 
                 if (!spoolerInstalled) {
                     Spacer(Modifier.height(8.dp))
@@ -802,10 +806,28 @@ class MainActivity : ComponentActivity() {
                     ) { Text("PrintSpooler 설치") }
                 }
 
-                if (!printServiceEnabled) {
+                if (!printServiceEnabled && !printDriverHidden) {
                     Spacer(Modifier.height(8.dp))
                     FilledTonalButton(
-                        onClick = { forceEnablePrintService() },
+                        onClick = {
+                            forceEnablePrintService()
+                            // Re-check after a short delay
+                            android.os.Handler(mainLooper).postDelayed({
+                                val enabled = Settings.Secure.getString(contentResolver, "enabled_print_services") ?: ""
+                                if (enabled.contains("LibroPrintService")) {
+                                    printServiceEnabled = true
+                                } else {
+                                    // Permission may not be granted — offer to hide
+                                    android.app.AlertDialog.Builder(this@MainActivity)
+                                        .setMessage("인쇄가 잘 되면 이 버튼을 숨기겠습니다.")
+                                        .setPositiveButton("확인") { _, _ ->
+                                            printDriverHidden = true
+                                        }
+                                        .setNegativeButton("취소", null)
+                                        .show()
+                                }
+                            }, 500)
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.filledTonalButtonColors(
                             containerColor = MaterialTheme.colorScheme.errorContainer
@@ -1296,6 +1318,15 @@ class MainActivity : ComponentActivity() {
                     onCheckedChange = {
                         showGames = it
                         AppPrefs.setShowGames(this@MainActivity, it)
+                    }
+                )
+                SettingSwitch(
+                    icon = { Icon(Icons.Filled.AutoStories, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) },
+                    label = "인기도서 TOP10 그리드 표시",
+                    checked = topBookGrid,
+                    onCheckedChange = {
+                        topBookGrid = it
+                        AppPrefs.setTopBookGrid(this@MainActivity, it)
                     }
                 )
                 SettingSwitch(

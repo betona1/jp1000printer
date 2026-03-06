@@ -247,7 +247,9 @@ adb_cmd shell "pm grant com.android.printspooler android.permission.ACCESS_FINE_
 adb_cmd shell "pm grant com.android.printdriver android.permission.WRITE_SECURE_SETTINGS" 2>/dev/null || true
 # OTA 업데이트를 위한 알 수 없는 출처 앱 설치 허용
 adb_cmd shell "settings put secure install_non_market_apps 1" 2>/dev/null || true
-# GreenMango 원격제어 마우스 제어용 접근성 서비스 활성화 (토글로 강제 바인딩)
+# GreenMango 원격제어: 액티비티 시작 → 접근성 서비스 토글 바인딩
+adb_cmd shell "am start -n com.greenmango.remote/.MainActivity" 2>/dev/null || true
+sleep 2
 adb_cmd shell "settings put secure enabled_accessibility_services ''" 2>/dev/null || true
 adb_cmd shell "settings put secure accessibility_enabled 0" 2>/dev/null || true
 sleep 1
@@ -256,6 +258,9 @@ adb_cmd shell "settings put secure accessibility_enabled 1" 2>/dev/null || true
 adb_cmd shell "settings put secure high_text_contrast_enabled 0" 2>/dev/null || true
 # GreenMango 백그라운드 실행 허용
 adb_cmd shell "dumpsys deviceidle whitelist +com.greenmango.remote" 2>/dev/null || true
+# BackgroundManagerService 백그라운드 킬 비활성화
+adb_cmd shell "settings put system kill_background_services 0" 2>/dev/null || true
+adb_cmd shell "settings put system background_services_limit_count 100" 2>/dev/null || true
 echo "  설정 적용 완료"
 
 # ── 완료 ──────────────────────────────────────────────────────────────────────

@@ -32,6 +32,7 @@ object AppPrefs {
     private const val KEY_NIGHT_SAVE_END_H = "night_save_end_h"
     private const val KEY_NIGHT_SAVE_END_M = "night_save_end_m"
     private const val KEY_SETUP_GUIDE_DISMISSED = "setup_guide_dismissed"
+    private const val KEY_TOP_BOOK_GRID = "top_book_grid"
     private const val DEFAULT_SCHOOL_URL = "https://read365.edunet.net/SchoolSearch"
     private const val DEFAULT_PASSWORD = "1234"
 
@@ -296,6 +297,18 @@ object AppPrefs {
     fun setSetupGuideDismissed(context: Context, dismissed: Boolean) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit().putBoolean(KEY_SETUP_GUIDE_DISMISSED, dismissed).apply()
+    }
+
+    // ── Top Book Grid ───────────────────────────────────────────────
+
+    fun isTopBookGrid(context: Context): Boolean {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_TOP_BOOK_GRID, true)
+    }
+
+    fun setTopBookGrid(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_TOP_BOOK_GRID, enabled).apply()
     }
 
     // ── Schedule ──────────────────────────────────────────────────────
