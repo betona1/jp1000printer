@@ -161,8 +161,8 @@ class WebPrintActivity : AppCompatActivity() {
         // Hide system status bar (fullscreen immersive)
         hideSystemBars()
 
-        // Software rendering for A40i GPU compatibility (EGL errors with Chrome 113)
-        webView.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+        // Use hardware rendering for performance; only fall back to software if needed
+        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
         WebView.setWebContentsDebuggingEnabled(true)
 
         webView.settings.apply {
