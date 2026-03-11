@@ -47,6 +47,16 @@ class LibroDiscoverySession(
             "72mm x 150mm",
             2835, 5906     // 72mm x 150mm
         )
+        val receipt72x75 = PrintAttributes.MediaSize(
+            "RECEIPT_72x75",
+            "72mm x 75mm",
+            2835, 2953     // 72mm x 75mm
+        )
+        val receipt72x200 = PrintAttributes.MediaSize(
+            "RECEIPT_72x200",
+            "72mm x 200mm",
+            2835, 7874     // 72mm x 200mm
+        )
         val receipt72x600 = PrintAttributes.MediaSize(
             "RECEIPT_72x600",
             "72mm x 600mm",
@@ -60,6 +70,8 @@ class LibroDiscoverySession(
 
         val capabilities = PrinterCapabilitiesInfo.Builder(printerId)
             .addMediaSize(receipt72x150, true)       // default
+            .addMediaSize(receipt72x75, false)
+            .addMediaSize(receipt72x200, false)
             .addMediaSize(receipt72x600, false)
             .addMediaSize(receipt72x1200, false)
             .addResolution(resolution, true)

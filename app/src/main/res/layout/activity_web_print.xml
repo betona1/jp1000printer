@@ -111,6 +111,16 @@
         <!-- ═══ RIGHT GROUP ═══ -->
 
         <ImageButton
+            android:id="@+id/btnPaperSize"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:src="@drawable/ic_paper_large"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="용지 크기"
+            android:padding="8dp"
+            android:visibility="gone" />
+
+        <ImageButton
             android:id="@+id/btnCutMode"
             android:layout_width="36dp"
             android:layout_height="36dp"

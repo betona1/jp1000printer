@@ -6,7 +6,7 @@
 #
 # 사전 요구사항:
 #   - A40i 기기가 USB로 연결되어 있을 것
-#   - Python 3 설치 (framework-res 패치용)
+#   - Windows 10 이상 (PowerShell 사용)
 #   - ADB는 이 폴더에 포함되어 있거나 PATH에 있을 것
 #
 # 사용법:
@@ -39,14 +39,14 @@ else
     exit 1
 fi
 
-# ── Python 경로 설정 ─────────────────────────────────────────────────────────
+# ── PowerShell 경로 설정 (framework-res 패치용) ──────────────────────────────
 
-if command -v python3 &>/dev/null; then
-    PYTHON=python3
-elif command -v python &>/dev/null; then
-    PYTHON=python
+if command -v powershell.exe &>/dev/null; then
+    POWERSHELL="powershell.exe"
+elif command -v pwsh &>/dev/null; then
+    POWERSHELL="pwsh"
 else
-    echo "ERROR: Python을 찾을 수 없습니다. Python 3을 설치하세요."
+    echo "ERROR: PowerShell을 찾을 수 없습니다."
     exit 1
 fi
 
@@ -213,10 +213,25 @@ echo "[7/8] WebView 패치 (framework-res.apk)..."
 # 현재 설치된 framework-res 가져오기
 FW_APK="$TMPDIR/framework-res-device.apk"
 FW_APK_WIN="$TMPDIR_WIN/framework-res-device.apk"
+PATCHED_APK="$TMPDIR_WIN/framework-res-device-patched.apk"
+PATCH_BIN="$(cd "$SCRIPT_DIR" && pwd)/config_webview_packages_patched.bin"
+if command -v cygpath &>/dev/null; then
+    PATCH_BIN_WIN="$(cygpath -m "$PATCH_BIN")"
+else
+    PATCH_BIN_WIN="$PATCH_BIN"
+fi
 adb_cmd pull //system/framework/framework-res.apk "$FW_APK" 2>&1 | tail -1
 
-# 이미 패치됐는지 확인 (Python에는 Windows 경로 전달)
-CONFIG_SIZE="$($PYTHON -c "import zipfile; z=zipfile.ZipFile('$FW_APK_WIN','r'); print(z.getinfo('res/xml/config_webview_packages.xml').file_size); z.close()" 2>/dev/null)" || CONFIG_SIZE="0"
+# PowerShell 패치 스크립트 경로
+PS1_SCRIPT="$SCRIPT_DIR/patch_framework_res.ps1"
+if command -v cygpath &>/dev/null; then
+    PS1_SCRIPT_WIN="$(cygpath -m "$PS1_SCRIPT")"
+else
+    PS1_SCRIPT_WIN="$PS1_SCRIPT"
+fi
+
+# 이미 패치됐는지 확인
+CONFIG_SIZE="$($POWERSHELL -NoProfile -ExecutionPolicy Bypass -File "$PS1_SCRIPT_WIN" -Check "$FW_APK_WIN" 2>/dev/null | tr -d '\r')" || CONFIG_SIZE="0"
 
 if [ "$CONFIG_SIZE" = "540" ]; then
     echo "  SKIP: framework-res.apk 이미 패치됨"
@@ -224,11 +239,18 @@ else
     # 백업
     adb_cmd shell "cp /system/framework/framework-res.apk /system/framework/framework-res.apk.bak" 2>&1
 
-    # 패치 (Python에는 Windows 경로 전달)
-    $PYTHON patch_framework_res.py "$FW_APK_WIN" config_webview_packages_patched.bin 2>&1 | grep -E "REPLACED|Original|Patched|Output" || true
+    # PowerShell .ps1 스크립트로 패치
+    if ! $POWERSHELL -NoProfile -ExecutionPolicy Bypass -File "$PS1_SCRIPT_WIN" "$FW_APK_WIN" "$PATCH_BIN_WIN" "$PATCHED_APK" 2>&1; then
+        echo "  ERROR: framework-res.apk 패치 실패"
+        exit 1
+    fi
 
-    # 푸시 (Python 출력은 Windows 경로 기준)
-    PATCHED_APK="$TMPDIR_WIN/framework-res-device-patched.apk"
+    if [ ! -f "$PATCHED_APK" ]; then
+        echo "  ERROR: 패치된 APK가 생성되지 않았습니다"
+        exit 1
+    fi
+
+    # 푸시
     adb_cmd push "$PATCHED_APK" //data/local/tmp/framework-res-patched.apk 2>&1 | tail -1
     adb_cmd shell "cp /data/local/tmp/framework-res-patched.apk /system/framework/framework-res.apk" 2>&1
     adb_cmd shell "chmod 644 /system/framework/framework-res.apk" 2>&1

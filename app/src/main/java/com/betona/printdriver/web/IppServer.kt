@@ -2,6 +2,7 @@ package com.betona.printdriver.web
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
 import android.os.Build
@@ -339,7 +340,15 @@ class IppServer(private val port: Int = 6631) {
                             scaled = BitmapConverter.scaleToWidth(cropped, pw)
                             if (scaled !== cropped) { cropped.recycle(); cropped = null }
 
-                            val mono = BitmapConverter.toMonochrome(scaled)
+                            // 인쇄 크기: 용지절약(1)=40%, 중간(2)=60%, 크게(3)=80%
+                            val zoomSetting = AppPrefs.getRenderQuality(context)
+                            val zoomFactor = when (zoomSetting) { 1 -> 0.5f; 2 -> 0.65f; else -> 0.8f }
+                            val shrunkH = maxOf(1, (scaled!!.height * zoomFactor).toInt())
+                            val shrunk = Bitmap.createScaledBitmap(scaled, pw, shrunkH, true)
+                            if (shrunk !== scaled) { scaled.recycle() }
+                            scaled = shrunk
+
+                            val mono = BitmapConverter.toMonochrome(scaled!!)
                             val trimmed = BitmapConverter.trimTrailingWhiteRows(mono)
                             scaled.recycle(); scaled = null
 

@@ -147,6 +147,8 @@ class MainActivity : ComponentActivity() {
     private var showSchedule by mutableStateOf(false)
     private var testText by mutableStateOf("")
     private var cutModeFullCut by mutableStateOf(true)
+    private var renderQuality by mutableIntStateOf(3)
+    private var showPaperSize by mutableStateOf(true)
     private var showPasswordChangeDialog by mutableStateOf(false)
     private var showManualPasswordChange by mutableStateOf(false)
     private var mobileMode by mutableStateOf(true)
@@ -206,6 +208,8 @@ class MainActivity : ComponentActivity() {
         showPowerButton = AppPrefs.getShowPowerButton(this)
         showSchedule = AppPrefs.getShowSchedule(this)
         cutModeFullCut = AppPrefs.isFullCut(this)
+        renderQuality = AppPrefs.getRenderQuality(this)
+        showPaperSize = AppPrefs.isShowPaperSize(this)
         mobileMode = AppPrefs.isMobileMode(this)
         showClock = AppPrefs.getShowClock(this)
         showRotateButton = AppPrefs.getShowRotateButton(this)
@@ -1292,6 +1296,42 @@ class MainActivity : ComponentActivity() {
                     onCheckedChange = {
                         cutModeFullCut = it
                         AppPrefs.setCutMode(this@MainActivity, if (it) "full" else "partial")
+                    }
+                )
+                // ── 인쇄 렌더링 품질 ──
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.Print, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text("인쇄 크기", modifier = Modifier.weight(1f))
+                    val labels = listOf("용지절약", "중간", "크게")
+                    val values = listOf(1, 2, 3)
+                    values.forEachIndexed { idx, v ->
+                        val selected = renderQuality == v
+                        OutlinedButton(
+                            onClick = {
+                                renderQuality = v
+                                AppPrefs.setRenderQuality(this@MainActivity, v)
+                            },
+                            colors = if (selected) ButtonDefaults.buttonColors() else ButtonDefaults.outlinedButtonColors(),
+                            modifier = Modifier.padding(start = if (idx > 0) 4.dp else 0.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Text(labels[idx], fontSize = 12.sp)
+                        }
+                    }
+                }
+                SettingSwitch(
+                    icon = { Icon(Icons.Filled.Print, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) },
+                    label = "용지변경 화면표시",
+                    checked = showPaperSize,
+                    onCheckedChange = {
+                        showPaperSize = it
+                        AppPrefs.setShowPaperSize(this@MainActivity, it)
                     }
                 )
                 SettingSwitch(

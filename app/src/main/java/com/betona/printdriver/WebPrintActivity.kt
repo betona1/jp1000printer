@@ -49,6 +49,7 @@ class WebPrintActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private lateinit var progressBar: ProgressBar
     private lateinit var btnCutMode: ImageButton
+    private lateinit var btnPaperSize: ImageButton
     private lateinit var btnPower: ImageButton
     private lateinit var btnRotate: ImageButton
     private lateinit var txtClock: TextView
@@ -143,9 +144,13 @@ class WebPrintActivity : AppCompatActivity() {
         btnPower = findViewById(R.id.btnPower)
         btnRotate = findViewById(R.id.btnRotate)
         btnCutMode = findViewById(R.id.btnCutMode)
+        btnPaperSize = findViewById(R.id.btnPaperSize)
         txtClock = findViewById(R.id.txtClock)
         txtSchedule = findViewById(R.id.txtSchedule)
         btnCutMode.setOnClickListener { toggleCutMode() }
+        btnPaperSize.setOnClickListener { togglePaperSize() }
+        updatePaperSizeIcon(AppPrefs.getRenderQuality(this))
+        btnPaperSize.visibility = if (AppPrefs.isShowPaperSize(this)) View.VISIBLE else View.GONE
         btnPower.setOnClickListener { confirmScreenOff() }
         btnRotate.setOnClickListener { toggleRotation() }
         findViewById<ImageButton>(R.id.btnMenu).setOnClickListener {
@@ -161,8 +166,8 @@ class WebPrintActivity : AppCompatActivity() {
         // Hide system status bar (fullscreen immersive)
         hideSystemBars()
 
-        // Use hardware rendering for performance; only fall back to software if needed
-        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+        // Software rendering — WebView 83 (Android 11) hardware rendering breaks Korean fonts
+        webView.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
         WebView.setWebContentsDebuggingEnabled(true)
 
         webView.settings.apply {
@@ -204,10 +209,12 @@ class WebPrintActivity : AppCompatActivity() {
                     Log.d(TAG, "Home URL resolved: ${view?.url}")
                 }
                 // Fix select element styling for older WebView (v83 renders wavy borders)
+                // Also force system font to fix broken Korean web font rendering on WebView 83
                 view?.evaluateJavascript("""
                     (function() {
                         var style = document.createElement('style');
-                        style.textContent = 'select { -webkit-appearance: none !important; appearance: none !important; border: 1px solid #aaa !important; border-image: none !important; border-radius: 4px !important; background: #fff url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%278%27%3E%3Cpath d=%27M0 0l6 8 6-8z%27 fill=%27%23666%27/%3E%3C/svg%3E") no-repeat right 8px center !important; background-size: 12px 8px !important; padding: 4px 28px 4px 8px !important; outline: none !important; }';
+                        style.textContent = 'select { -webkit-appearance: none !important; appearance: none !important; border: 1px solid #aaa !important; border-image: none !important; border-radius: 4px !important; background: #fff url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%278%27%3E%3Cpath d=%27M0 0l6 8 6-8z%27 fill=%27%23666%27/%3E%3C/svg%3E") no-repeat right 8px center !important; background-size: 12px 8px !important; padding: 4px 28px 4px 8px !important; outline: none !important; }'
+                            + ' * { font-family: "Malgun Gothic", "NanumGothic", sans-serif !important; }';
                         document.head.appendChild(style);
                     })();
                 """.trimIndent(), null)
@@ -431,6 +438,21 @@ class WebPrintActivity : AppCompatActivity() {
         btnCutMode.setImageResource(
             if (fullCut) R.drawable.ic_cut_full else R.drawable.ic_cut_partial
         )
+    }
+
+    private fun togglePaperSize() {
+        val current = AppPrefs.getRenderQuality(this)
+        val next = when (current) { 3 -> 2; 2 -> 1; else -> 3 }
+        AppPrefs.setRenderQuality(this, next)
+        updatePaperSizeIcon(next)
+    }
+
+    private fun updatePaperSizeIcon(quality: Int) {
+        btnPaperSize.setImageResource(when (quality) {
+            1 -> R.drawable.ic_paper_small
+            2 -> R.drawable.ic_paper_medium
+            else -> R.drawable.ic_paper_large
+        })
     }
 
     /** Manual screen off — confirm then turn off screen */

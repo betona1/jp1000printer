@@ -1,0 +1,12 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- 큰 네모: 크게 80% -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M4,4h16v16h-16z"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.5"/>
+</vector>
