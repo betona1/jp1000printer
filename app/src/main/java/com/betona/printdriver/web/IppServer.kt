@@ -342,7 +342,7 @@ class IppServer(private val port: Int = 6631) {
 
                             // 인쇄 크기: 용지절약(1)=40%, 중간(2)=60%, 크게(3)=80%
                             val zoomSetting = AppPrefs.getRenderQuality(context)
-                            val zoomFactor = when (zoomSetting) { 1 -> 0.5f; 2 -> 0.65f; else -> 0.8f }
+                            val zoomFactor = when (zoomSetting) { 1 -> 0.65f; 2 -> 0.8f; else -> 1.0f }
                             val shrunkH = maxOf(1, (scaled!!.height * zoomFactor).toInt())
                             val shrunk = Bitmap.createScaledBitmap(scaled, pw, shrunkH, true)
                             if (shrunk !== scaled) { scaled.recycle() }

@@ -144,10 +144,10 @@ class LibroPrintService : PrintService() {
                             scaled = BitmapConverter.scaleToWidth(cropped, DevicePrinter.PRINT_WIDTH_PX)
                             if (scaled !== cropped) { cropped.recycle(); cropped = null }
 
-                            // 인쇄 크기: 용지절약(1)=40%, 중간(2)=60%, 크게(3)=80%
+                            // 인쇄 크기: 용지절약(1)=65%, 중간(2)=80%, 크게(3)=100%
                             val pw = DevicePrinter.PRINT_WIDTH_PX
                             val zoomSetting = AppPrefs.getRenderQuality(this)
-                            val zoomFactor = when (zoomSetting) { 1 -> 0.5f; 2 -> 0.65f; else -> 0.8f }
+                            val zoomFactor = when (zoomSetting) { 1 -> 0.65f; 2 -> 0.8f; else -> 1.0f }
                             val shrunkH = maxOf(1, (scaled!!.height * zoomFactor).toInt())
                             val shrunk = Bitmap.createScaledBitmap(scaled, pw, shrunkH, true)
                             if (shrunk !== scaled) { scaled.recycle() }
