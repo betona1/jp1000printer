@@ -6,8 +6,9 @@
 #
 # 사전 요구사항:
 #   - A40i 기기가 USB로 연결되어 있을 것
-#   - Windows 10 이상 (PowerShell 사용)
+#   - Python 3 (framework-res 패치용)
 #   - ADB는 이 폴더에 포함되어 있거나 PATH에 있을 것
+#   - Windows / Linux / macOS 모두 지원
 #
 # 사용법:
 #   bash setup_a40i.sh                    # 기기가 1대만 연결된 경우
@@ -39,27 +40,25 @@ else
     exit 1
 fi
 
-# ── PowerShell 경로 설정 (framework-res 패치용) ──────────────────────────────
+# ── Python 경로 설정 (framework-res 패치용) ──────────────────────────────────
 
-if command -v powershell.exe &>/dev/null; then
-    POWERSHELL="powershell.exe"
-elif command -v pwsh &>/dev/null; then
-    POWERSHELL="pwsh"
+if command -v python3 &>/dev/null; then
+    PYTHON=python3
+elif command -v python &>/dev/null; then
+    PYTHON=python
 else
-    echo "ERROR: PowerShell을 찾을 수 없습니다."
+    echo "ERROR: Python을 찾을 수 없습니다."
+    echo "  Python 3를 설치하세요."
     exit 1
 fi
 
-# ── 임시 디렉토리 (Windows 호환) ─────────────────────────────────────────────
+# ── 임시 디렉토리 (크로스 플랫폼) ────────────────────────────────────────────
 
-# Git Bash에서 /tmp은 bash에서는 작동하지만 Python에서는 인식 불가
-# cygpath로 Windows 실제 경로를 구해서 Python에도 전달
 TMPDIR="${TEMP:-${TMP:-/tmp}}"
 TMPDIR="${TMPDIR//\\//}"
+# Windows Git Bash: cygpath로 Python이 인식하는 경로로 변환
 if command -v cygpath &>/dev/null; then
-    TMPDIR_WIN="$(cygpath -m "$TMPDIR")"
-else
-    TMPDIR_WIN="$TMPDIR"
+    TMPDIR="$(cygpath -m "$TMPDIR")"
 fi
 
 # ── 인자 파싱 ───────────────────────────────────────────────────────────────
@@ -212,26 +211,18 @@ echo "[7/8] WebView 패치 (framework-res.apk)..."
 
 # 현재 설치된 framework-res 가져오기
 FW_APK="$TMPDIR/framework-res-device.apk"
-FW_APK_WIN="$TMPDIR_WIN/framework-res-device.apk"
-PATCHED_APK="$TMPDIR_WIN/framework-res-device-patched.apk"
-PATCH_BIN="$(cd "$SCRIPT_DIR" && pwd)/config_webview_packages_patched.bin"
+PATCHED_APK="$TMPDIR/framework-res-device-patched.apk"
+PATCH_BIN="$SCRIPT_DIR/config_webview_packages_patched.bin"
+PATCH_PY="$SCRIPT_DIR/patch_framework_res.py"
+# Windows Git Bash: Python은 cygpath 경로 필요
 if command -v cygpath &>/dev/null; then
-    PATCH_BIN_WIN="$(cygpath -m "$PATCH_BIN")"
-else
-    PATCH_BIN_WIN="$PATCH_BIN"
+    PATCH_BIN="$(cygpath -m "$PATCH_BIN")"
+    PATCH_PY="$(cygpath -m "$PATCH_PY")"
 fi
 adb_cmd pull //system/framework/framework-res.apk "$FW_APK" 2>&1 | tail -1
 
-# PowerShell 패치 스크립트 경로
-PS1_SCRIPT="$SCRIPT_DIR/patch_framework_res.ps1"
-if command -v cygpath &>/dev/null; then
-    PS1_SCRIPT_WIN="$(cygpath -m "$PS1_SCRIPT")"
-else
-    PS1_SCRIPT_WIN="$PS1_SCRIPT"
-fi
-
 # 이미 패치됐는지 확인
-CONFIG_SIZE="$($POWERSHELL -NoProfile -ExecutionPolicy Bypass -File "$PS1_SCRIPT_WIN" -Check "$FW_APK_WIN" 2>/dev/null | tr -d '\r')" || CONFIG_SIZE="0"
+CONFIG_SIZE="$($PYTHON "$PATCH_PY" --check "$FW_APK" 2>/dev/null | tr -d '\r')" || CONFIG_SIZE="0"
 
 if [ "$CONFIG_SIZE" = "540" ]; then
     echo "  SKIP: framework-res.apk 이미 패치됨"
@@ -239,8 +230,8 @@ else
     # 백업
     adb_cmd shell "cp /system/framework/framework-res.apk /system/framework/framework-res.apk.bak" 2>&1
 
-    # PowerShell .ps1 스크립트로 패치
-    if ! $POWERSHELL -NoProfile -ExecutionPolicy Bypass -File "$PS1_SCRIPT_WIN" "$FW_APK_WIN" "$PATCH_BIN_WIN" "$PATCHED_APK" 2>&1; then
+    # Python 스크립트로 패치
+    if ! $PYTHON "$PATCH_PY" "$FW_APK" "$PATCH_BIN" "$PATCHED_APK" 2>&1; then
         echo "  ERROR: framework-res.apk 패치 실패"
         exit 1
     fi
