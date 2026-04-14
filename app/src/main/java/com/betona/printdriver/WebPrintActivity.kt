@@ -215,7 +215,7 @@ class WebPrintActivity : AppCompatActivity() {
                         var style = document.createElement('style');
                         style.textContent = 'select { -webkit-appearance: none !important; appearance: none !important; border: 1px solid #aaa !important; border-image: none !important; border-radius: 4px !important; background: #fff url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%278%27%3E%3Cpath d=%27M0 0l6 8 6-8z%27 fill=%27%23666%27/%3E%3C/svg%3E") no-repeat right 8px center !important; background-size: 12px 8px !important; padding: 4px 28px 4px 8px !important; outline: none !important; }'
                             + ' * { font-family: "Malgun Gothic", "NanumGothic", sans-serif !important; }';
-                        document.head.appendChild(style);
+                        (document.head || document.documentElement).appendChild(style);
                     })();
                 """.trimIndent(), null)
                 // Override 인기도서 TOP 10 swiper to vertical grid (setting-dependent)
@@ -240,7 +240,7 @@ class WebPrintActivity : AppCompatActivity() {
                                 + '.top-book-list .swiper-wrapper { display: flex !important; flex-wrap: wrap !important; transform: none !important; justify-content: flex-start !important; }'
                                 + '.top-book-list .swiper { overflow: visible !important; }'
                                 + '$gridCss';
-                            document.head.appendChild(s);
+                            (document.head || document.documentElement).appendChild(s);
                         })();
                     """.trimIndent(), null)
                 }
