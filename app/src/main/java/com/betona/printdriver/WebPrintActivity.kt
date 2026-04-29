@@ -244,6 +244,39 @@ class WebPrintActivity : AppCompatActivity() {
                         })();
                     """.trimIndent(), null)
                 }
+                // DSL(read365) 책 상세: 작고 붙어있는 "인쇄" 버튼 탭 영역을 크게.
+                // 텍스트/onclick/class 어디서든 print 패턴 잡고 min 44x44 + 좌우 여백 추가.
+                if (url?.contains("read365") == true || url?.contains("edunet") == true) {
+                    view?.evaluateJavascript("""
+                        (function() {
+                            function enlarge() {
+                                var nodes = document.querySelectorAll('button, a, [role=button], span[onclick]');
+                                nodes.forEach(function(n) {
+                                    if (n.dataset.libroEnlarged) return;
+                                    var t = (n.textContent || '').trim();
+                                    var oc = (n.getAttribute('onclick') || '');
+                                    var cls = (n.className || '') + '';
+                                    var hit = (t === '인쇄' || t === '프린트' || t === 'Print' ||
+                                               /print/i.test(oc) || /print/i.test(cls));
+                                    if (hit) {
+                                        n.dataset.libroEnlarged = '1';
+                                        n.style.minWidth = '64px';
+                                        n.style.minHeight = '48px';
+                                        n.style.padding = '10px 18px';
+                                        n.style.marginLeft = '10px';
+                                        n.style.marginRight = '10px';
+                                        n.style.fontSize = '15px';
+                                        n.style.fontWeight = 'bold';
+                                        n.style.borderRadius = '6px';
+                                    }
+                                });
+                            }
+                            enlarge();
+                            var obs = new MutationObserver(enlarge);
+                            obs.observe(document.body, { childList: true, subtree: true });
+                        })();
+                    """.trimIndent(), null)
+                }
                 // Override window.open to capture print HTML, override window.print
                 view?.evaluateJavascript("""
                     (function() {

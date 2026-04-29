@@ -2,6 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:allowBackup="false"
@@ -21,6 +22,17 @@
                 android:name="android.print.printservice"
                 android:resource="@xml/print_service_info" />
         </service>
+
+        <!-- Settings: pick a default kiosk so only that one shows in the print picker -->
+        <activity
+            android:name=".PluginSettingsActivity"
+            android:exported="true"
+            android:label="LibroPrinter 플러그인">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
 
     </application>
 

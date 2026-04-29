@@ -111,9 +111,16 @@ class LibroNetDiscoverySession(
             @Suppress("DEPRECATION")
             override fun onServiceFound(serviceInfo: NsdServiceInfo) {
                 Log.d(TAG, "NSD found: ${serviceInfo.serviceName}")
-                if (serviceInfo.serviceName.contains(PRINTER_NAME_PREFIX, ignoreCase = true)) {
-                    mgr.resolveService(serviceInfo, createResolveListener())
+                if (!serviceInfo.serviceName.contains(PRINTER_NAME_PREFIX, ignoreCase = true)) return
+
+                // Apply user's preferred-printer filter — if set, only that kiosk is shown.
+                val preferred = PluginPrefs.getPreferredPrinter(service)
+                if (preferred.isNotEmpty() && serviceInfo.serviceName != preferred) {
+                    Log.d(TAG, "NSD filtered out by preferred-printer setting: ${serviceInfo.serviceName}")
+                    return
                 }
+
+                mgr.resolveService(serviceInfo, createResolveListener())
             }
 
             override fun onServiceLost(serviceInfo: NsdServiceInfo) {

@@ -36,6 +36,8 @@ object AppPrefs {
     private const val KEY_PRINT_DRIVER_HIDDEN = "print_driver_hidden"
     private const val KEY_RENDER_QUALITY = "render_quality"
     private const val KEY_SHOW_PAPER_SIZE = "show_paper_size"
+    private const val KEY_PRINTER_ALIAS = "printer_alias"
+    private const val KEY_RENDER_QUALITY_IPP = "render_quality_ipp"
     private const val DEFAULT_SCHOOL_URL = "https://read365.edunet.net/SchoolSearch"
     private const val DEFAULT_PASSWORD = "1234"
 
@@ -47,6 +49,19 @@ object AppPrefs {
     fun getSchoolUrl(context: Context): String {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getString(KEY_SCHOOL_URL, DEFAULT_SCHOOL_URL) ?: DEFAULT_SCHOOL_URL
+    }
+
+    /** User-defined kiosk label, e.g. "1층 카운터". Empty = use auto-generated model name. */
+    fun getPrinterAlias(context: Context): String {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_PRINTER_ALIAS, "") ?: ""
+    }
+
+    fun setPrinterAlias(context: Context, alias: String) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_PRINTER_ALIAS, alias.trim())
+            .apply()
     }
 
     fun setSchoolUrl(context: Context, url: String) {
@@ -328,15 +343,26 @@ object AppPrefs {
 
     // ── Render Quality ──────────────────────────────────────────────
 
-    /** Returns render scale multiplier: 1, 2, or 3 */
+    /** Returns render scale multiplier: 1=용지절약, 2=중간, 3=크게. Default 용지절약(1). */
     fun getRenderQuality(context: Context): Int {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getInt(KEY_RENDER_QUALITY, 3)
+            .getInt(KEY_RENDER_QUALITY, 1)
     }
 
     fun setRenderQuality(context: Context, quality: Int) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit().putInt(KEY_RENDER_QUALITY, quality.coerceIn(1, 3)).apply()
+    }
+
+    /** Render quality for phone→kiosk IPP prints. Default = 용지절약(1) for compact prints. */
+    fun getRenderQualityIpp(context: Context): Int {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getInt(KEY_RENDER_QUALITY_IPP, 1)
+    }
+
+    fun setRenderQualityIpp(context: Context, quality: Int) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putInt(KEY_RENDER_QUALITY_IPP, quality.coerceIn(1, 3)).apply()
     }
 
     // ── Show Paper Size Button ──────────────────────────────────────

@@ -42,11 +42,16 @@ fi
 
 # ── Python 경로 설정 (framework-res 패치용) ──────────────────────────────────
 
-if command -v python3 &>/dev/null; then
-    PYTHON=python3
-elif command -v python &>/dev/null; then
-    PYTHON=python
-else
+# Python 탐색: 실제 동작하는 Python 3를 찾기
+# Windows Store 스텁(python3.exe)은 --version이 실패하므로 검증 필요
+PYTHON=""
+for _py in python3 python; do
+    if command -v "$_py" &>/dev/null && "$_py" --version &>/dev/null; then
+        PYTHON="$_py"
+        break
+    fi
+done
+if [ -z "$PYTHON" ]; then
     echo "ERROR: Python을 찾을 수 없습니다."
     echo "  Python 3를 설치하세요."
     exit 1

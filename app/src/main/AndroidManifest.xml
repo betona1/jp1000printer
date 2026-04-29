@@ -93,6 +93,13 @@
             android:name=".web.WebServerService"
             android:exported="false" />
 
+        <!-- Isolated PDF rendering — runs in :renderer process so we can kill it
+             on hang (Android 7 libpdfium leak) without affecting the main app. -->
+        <service
+            android:name=".web.PdfRenderService"
+            android:process=":renderer"
+            android:exported="false" />
+
         <!-- Auto-start web server on app process launch -->
         <provider
             android:name=".web.WebServerInitProvider"

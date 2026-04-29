@@ -142,12 +142,14 @@ class MainActivity : ComponentActivity() {
     private var logText by mutableStateOf("")
     private var deviceStatus by mutableStateOf("확인 중...")
     private var schoolUrl by mutableStateOf("")
+    private var printerAlias by mutableStateOf("")
     private var autoStartEnabled by mutableStateOf(false)
     private var showPowerButton by mutableStateOf(false)
     private var showSchedule by mutableStateOf(false)
     private var testText by mutableStateOf("")
     private var cutModeFullCut by mutableStateOf(true)
-    private var renderQuality by mutableIntStateOf(3)
+    private var renderQuality by mutableIntStateOf(1)
+    private var renderQualityIpp by mutableIntStateOf(1)
     private var showPaperSize by mutableStateOf(true)
     private var showPasswordChangeDialog by mutableStateOf(false)
     private var showManualPasswordChange by mutableStateOf(false)
@@ -204,11 +206,13 @@ class MainActivity : ComponentActivity() {
             ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT
 
         schoolUrl = AppPrefs.getSchoolUrl(this)
+        printerAlias = AppPrefs.getPrinterAlias(this)
         autoStartEnabled = AppPrefs.getAutoStart(this)
         showPowerButton = AppPrefs.getShowPowerButton(this)
         showSchedule = AppPrefs.getShowSchedule(this)
         cutModeFullCut = AppPrefs.isFullCut(this)
         renderQuality = AppPrefs.getRenderQuality(this)
+        renderQualityIpp = AppPrefs.getRenderQualityIpp(this)
         showPaperSize = AppPrefs.isShowPaperSize(this)
         mobileMode = AppPrefs.isMobileMode(this)
         showClock = AppPrefs.getShowClock(this)
@@ -1112,6 +1116,7 @@ class MainActivity : ComponentActivity() {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             ConnectionInfoCard()
+            PrinterAliasCard()
             SchoolUrlCard()
             AppSettingsCard()
             ScheduleCard()
@@ -1216,6 +1221,53 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
+    private fun PrinterAliasCard() {
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.Print,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("프린터 별칭", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "예) 1층카운터, 2층데스크 — 폰에 'LibroPrinter-별칭'으로 표시",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = printerAlias,
+                    onValueChange = { printerAlias = it },
+                    label = { Text("별칭 (비우면 기기 모델명 사용)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        AppPrefs.setPrinterAlias(this@MainActivity, printerAlias)
+                        Toast.makeText(
+                            this@MainActivity,
+                            "별칭 저장 — 재시작 시 반영됩니다",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("저장") }
+            }
+        }
+    }
+
+    @Composable
     private fun SchoolUrlCard() {
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
@@ -1307,7 +1359,7 @@ class MainActivity : ComponentActivity() {
                 ) {
                     Icon(Icons.Filled.Print, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
                     Spacer(Modifier.width(12.dp))
-                    Text("인쇄 크기", modifier = Modifier.weight(1f))
+                    Text("인쇄 크기 (키오스크)", modifier = Modifier.weight(1f), fontSize = 13.sp)
                     val labels = listOf("용지절약", "중간", "크게")
                     val values = listOf(1, 2, 3)
                     values.forEachIndexed { idx, v ->
@@ -1322,6 +1374,32 @@ class MainActivity : ComponentActivity() {
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                         ) {
                             Text(labels[idx], fontSize = 12.sp)
+                        }
+                    }
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.PhoneAndroid, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text("인쇄 크기 (폰)", modifier = Modifier.weight(1f), fontSize = 13.sp)
+                    val labelsIpp = listOf("용지절약", "중간", "크게")
+                    val valuesIpp = listOf(1, 2, 3)
+                    valuesIpp.forEachIndexed { idx, v ->
+                        val selected = renderQualityIpp == v
+                        OutlinedButton(
+                            onClick = {
+                                renderQualityIpp = v
+                                AppPrefs.setRenderQualityIpp(this@MainActivity, v)
+                            },
+                            colors = if (selected) ButtonDefaults.buttonColors() else ButtonDefaults.outlinedButtonColors(),
+                            modifier = Modifier.padding(start = if (idx > 0) 4.dp else 0.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Text(labelsIpp[idx], fontSize = 12.sp)
                         }
                     }
                 }

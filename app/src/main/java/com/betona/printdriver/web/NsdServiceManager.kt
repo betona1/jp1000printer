@@ -56,9 +56,14 @@ class NsdServiceManager(private val context: Context) {
         ) ?: "unknown"
         printerUuid = UUID.nameUUIDFromBytes("LibroPrinter-$androidId".toByteArray()).toString()
 
-        val model = Build.MODEL?.replace(" ", "") ?: "Unknown"
-        val shortModel = if (model.length > 10) model.takeLast(10) else model
-        printerName = "LibroPrinter-$shortModel"
+        val alias = com.betona.printdriver.AppPrefs.getPrinterAlias(context)
+        printerName = if (alias.isNotEmpty()) {
+            "LibroPrinter-$alias"
+        } else {
+            val model = Build.MODEL?.replace(" ", "") ?: "Unknown"
+            val shortModel = if (model.length > 10) model.takeLast(10) else model
+            "LibroPrinter-$shortModel"
+        }
 
         nsdManager = context.getSystemService(Context.NSD_SERVICE) as? NsdManager
         Log.i(TAG, "초기화: name=$printerName, uuid=$printerUuid")

@@ -1,17 +1,10 @@
 package com.betona.printdriver.web
 
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.pdf.PdfRenderer
 import android.os.Build
-import android.os.ParcelFileDescriptor
 import android.provider.Settings
 import android.util.Log
 import com.betona.printdriver.AppPrefs
-import com.betona.printdriver.BitmapConverter
-import com.betona.printdriver.DevicePrinter
 import java.io.*
 import java.net.Inet4Address
 import java.net.InetSocketAddress
@@ -36,6 +29,18 @@ class IppServer(private val port: Int = 6631) {
 
     private var jobIdCounter = 1000
 
+    // Async job tracking — phone PrintFramework expects standard IPP state machine:
+    //   pending → processing → completed/aborted
+    // Returning COMPLETED synchronously (after blocking) confuses Samsung's framework
+    // and causes ~48s wait before the next Print-Job is sent.
+    private data class JobInfo(
+        val id: Int,
+        @Volatile var state: Int,    // IPP job-state enum (3=pending, 5=processing, 7=aborted, 9=completed)
+        val createdAt: Int,           // unix seconds
+        @Volatile var completedAt: Int = 0
+    )
+    private val jobs = java.util.concurrent.ConcurrentHashMap<Int, JobInfo>()
+
     // Per-device UUID and name (set in start() from device serial/ID)
     private lateinit var printerUuid: String
     private lateinit var printerName: String
@@ -48,10 +53,15 @@ class IppServer(private val port: Int = 6631) {
         val androidId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown"
         printerUuid = UUID.nameUUIDFromBytes("LibroPrinter-$androidId".toByteArray()).toString()
 
-        // Device-specific name using model suffix (e.g. "LibroPrinter-P1000", "LibroPrinter-A40i")
-        val model = Build.MODEL?.replace(" ", "") ?: "Unknown"
-        val shortModel = if (model.length > 10) model.takeLast(10) else model
-        printerName = "LibroPrinter-$shortModel"
+        // Use admin-set alias if present, else fall back to model-based name.
+        val alias = AppPrefs.getPrinterAlias(context)
+        printerName = if (alias.isNotEmpty()) {
+            "LibroPrinter-$alias"
+        } else {
+            val model = Build.MODEL?.replace(" ", "") ?: "Unknown"
+            val shortModel = if (model.length > 10) model.takeLast(10) else model
+            "LibroPrinter-$shortModel"
+        }
         Log.i(TAG, "Printer name=$printerName, uuid=$printerUuid, androidId=$androidId")
 
         if (running) return
@@ -166,6 +176,7 @@ class IppServer(private val port: Int = 6631) {
             OP_PRINT_JOB -> handlePrintJob(verMajor, verMinor, reqId, body, context)
             OP_VALIDATE_JOB -> handleValidateJob(verMajor, verMinor, reqId)
             OP_GET_JOB_ATTRIBUTES -> handleGetJobAttributes(verMajor, verMinor, reqId, body)
+            OP_GET_JOBS -> handleGetJobs(verMajor, verMinor, reqId, body)
             else -> {
                 Log.w(TAG, "Unsupported IPP operation: 0x${opId.toString(16)}")
                 buildErrorResponse(reqId, 0x0501, verMajor, verMinor)
@@ -252,6 +263,10 @@ class IppServer(private val port: Int = 6631) {
     }
 
     // ── Print-Job ────────────────────────────────────────────────────────
+    // ASYNC: respond immediately with state=processing, render+print on background
+    // thread, mark completed when done. Phone polls Get-Job-Attributes to follow
+    // the state transitions. Synchronous response (blocking until print done)
+    // confuses the phone's PrintFramework.
 
     private fun handlePrintJob(
         verMajor: Int, verMinor: Int, reqId: Int, body: ByteArray, context: Context
@@ -266,21 +281,32 @@ class IppServer(private val port: Int = 6631) {
         Log.i(TAG, "Print-Job: ${docData.size} bytes document data")
 
         val currentJobId = synchronized(this) { jobIdCounter++ }
+        val now = (System.currentTimeMillis() / 1000).toInt()
+        val job = JobInfo(currentJobId, JOB_STATE_PROCESSING, now)
+        jobs[currentJobId] = job
 
-        var tempFile: File? = null
-        try {
-            tempFile = File.createTempFile("ipp_job_", ".pdf", context.cacheDir)
-            FileOutputStream(tempFile).use { it.write(docData) }
-            renderAndPrint(tempFile, context)
-            Log.i(TAG, "Print-Job #$currentJobId completed")
-        } catch (e: Exception) {
-            Log.e(TAG, "Print-Job #$currentJobId failed", e)
-            return buildErrorResponse(reqId, 0x0500, verMajor, verMinor)
-        } finally {
-            tempFile?.delete()
-        }
+        // Spawn background printer — DevicePrinter is @Synchronized at the singleton
+        // level, so concurrent print jobs get serialized at the printer (correct).
+        Thread({
+            var tempFile: File? = null
+            try {
+                tempFile = File.createTempFile("ipp_job_", ".pdf", context.cacheDir)
+                FileOutputStream(tempFile).use { it.write(docData) }
+                renderAndPrint(tempFile, context)
+                job.completedAt = (System.currentTimeMillis() / 1000).toInt()
+                job.state = JOB_STATE_COMPLETED
+                Log.i(TAG, "Print-Job #$currentJobId completed")
+            } catch (e: Exception) {
+                Log.e(TAG, "Print-Job #$currentJobId failed", e)
+                job.completedAt = (System.currentTimeMillis() / 1000).toInt()
+                job.state = JOB_STATE_ABORTED
+            } finally {
+                tempFile?.delete()
+            }
+        }, "ipp-print-job-$currentJobId").start()
 
-        return buildJobResponse(verMajor, verMinor, reqId, currentJobId, JOB_STATE_COMPLETED)
+        // Respond immediately with processing state — phone now polls for state changes.
+        return buildJobResponse(verMajor, verMinor, reqId, currentJobId, JOB_STATE_PROCESSING)
     }
 
     // ── Validate-Job ─────────────────────────────────────────────────────
@@ -293,93 +319,93 @@ class IppServer(private val port: Int = 6631) {
         return out.toByteArray()
     }
 
+    // ── Get-Jobs ─────────────────────────────────────────────────────────
+    // Returns jobs that match `which-jobs` (default = "not-completed").
+    // Without this handler the phone polls for ~8s; returning empty makes it
+    // wait even longer (~22s); returning all jobs unfiltered breaks polling
+    // entirely. So filter by which-jobs.
+
+    private fun handleGetJobs(verMajor: Int, verMinor: Int, reqId: Int, body: ByteArray): ByteArray {
+        val whichJobs = parseStringAttribute(body, "which-jobs") ?: "not-completed"
+        val out = ByteArrayOutputStream()
+        out.writeIppHeader(verMajor, verMinor, STATUS_OK, reqId)
+        out.writeOperationAttributes()
+
+        val matching = jobs.values.filter {
+            when (whichJobs) {
+                "completed" -> it.state == JOB_STATE_COMPLETED || it.state == JOB_STATE_ABORTED
+                "all" -> true
+                else /* not-completed */ -> it.state == JOB_STATE_PROCESSING || it.state == JOB_STATE_PENDING
+            }
+        }.sortedBy { it.id }
+
+        for (job in matching) {
+            out.write(TAG_JOB_ATTRIBUTES)
+            out.writeInteger("job-id", job.id)
+            val ip = getLocalIpAddress()
+            out.writeUri("job-uri", "ipp://$ip:$port/ipp/print/jobs/${job.id}")
+            out.writeName("job-name", "Print Job")
+            out.writeEnum("job-state", job.state)
+            out.writeKeyword("job-state-reasons",
+                if (job.state == JOB_STATE_COMPLETED) "job-completed-successfully" else "none")
+            out.writeName("job-originating-user-name", "user")
+            out.writeMimeType("document-format", "application/pdf")
+        }
+
+        out.write(TAG_END_OF_ATTRIBUTES)
+        return out.toByteArray()
+    }
+
+    /** Parse a string attribute value from an IPP request body. */
+    private fun parseStringAttribute(body: ByteArray, attrName: String): String? {
+        var i = 8
+        while (i < body.size) {
+            val tag = body[i].toInt() and 0xFF
+            if (tag == TAG_END_OF_ATTRIBUTES) break
+            if (tag in 0x00..0x0F) { i++; continue }
+            i++ // value tag byte
+            if (i + 2 > body.size) break
+            val nameLen = ((body[i].toInt() and 0xFF) shl 8) or (body[i + 1].toInt() and 0xFF)
+            i += 2
+            val name = if (nameLen > 0 && i + nameLen <= body.size) {
+                String(body, i, nameLen, Charsets.UTF_8)
+            } else ""
+            i += nameLen
+            if (i + 2 > body.size) break
+            val valueLen = ((body[i].toInt() and 0xFF) shl 8) or (body[i + 1].toInt() and 0xFF)
+            i += 2
+            if (name == attrName && valueLen > 0 && i + valueLen <= body.size) {
+                return String(body, i, valueLen, Charsets.UTF_8)
+            }
+            i += valueLen
+        }
+        return null
+    }
+
     // ── Get-Job-Attributes ───────────────────────────────────────────────
 
     private fun handleGetJobAttributes(
         verMajor: Int, verMinor: Int, reqId: Int, body: ByteArray
     ): ByteArray {
         val jobId = parseRequestedJobId(body) ?: (jobIdCounter - 1)
-        return buildJobResponse(verMajor, verMinor, reqId, jobId, JOB_STATE_COMPLETED)
+        val state = jobs[jobId]?.state ?: JOB_STATE_COMPLETED
+        return buildJobResponse(verMajor, verMinor, reqId, jobId, state)
     }
 
     // ── PDF Rendering & Printing ─────────────────────────────────────────
+    // Rendering runs in the isolated `:renderer` process via PdfRenderClient.
+    // If PdfRenderer hangs (Android 7 libpdfium leak), the client kills that
+    // process; the next print rebinds and gets a fresh one. Main process keeps
+    // its DevicePrinter (JNI to /dev/printer) intact across hangs.
 
     private fun renderAndPrint(pdfFile: File, context: Context) {
-        val fd = ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY)
-        try {
-            val renderer = PdfRenderer(fd)
-            try {
-                if (!DevicePrinter.isOpen) {
-                    DevicePrinter.open()
-                    DevicePrinter.initPrinter()
-                }
-
-                val pw = DevicePrinter.PRINT_WIDTH_PX // 576
-                val pageCount = renderer.pageCount
-                Log.i(TAG, "Rendering $pageCount page(s)")
-
-                for (i in 0 until pageCount) {
-                    val page = renderer.openPage(i)
-                    try {
-                        // Render at 3x printer width for quality, then crop+scale
-                        val renderWidth = pw * 3 // 1728px
-                        val renderHeight = maxOf(1, (renderWidth.toDouble() * page.height / page.width).toInt())
-
-                        var bitmap: Bitmap? = null
-                        var cropped: Bitmap? = null
-                        var scaled: Bitmap? = null
-                        try {
-                            bitmap = Bitmap.createBitmap(renderWidth, renderHeight, Bitmap.Config.ARGB_8888)
-                            bitmap.eraseColor(Color.WHITE)
-                            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
-
-                            // Crop white margins → scale to printer width
-                            cropped = BitmapConverter.cropWhiteBorders(bitmap)
-                            if (cropped !== bitmap) { bitmap.recycle(); bitmap = null }
-
-                            scaled = BitmapConverter.scaleToWidth(cropped, pw)
-                            if (scaled !== cropped) { cropped.recycle(); cropped = null }
-
-                            // 인쇄 크기: 용지절약(1)=40%, 중간(2)=60%, 크게(3)=80%
-                            val zoomSetting = AppPrefs.getRenderQuality(context)
-                            val zoomFactor = when (zoomSetting) { 1 -> 0.65f; 2 -> 0.8f; else -> 1.0f }
-                            val shrunkH = maxOf(1, (scaled!!.height * zoomFactor).toInt())
-                            val shrunk = Bitmap.createScaledBitmap(scaled, pw, shrunkH, true)
-                            if (shrunk !== scaled) { scaled.recycle() }
-                            scaled = shrunk
-
-                            val mono = BitmapConverter.toMonochrome(scaled!!)
-                            val trimmed = BitmapConverter.trimTrailingWhiteRows(mono)
-                            scaled.recycle(); scaled = null
-
-                            if (i == pageCount - 1) {
-                                DevicePrinter.printBitmapAndCut(trimmed, fullCut = AppPrefs.isFullCut(context))
-                            } else {
-                                DevicePrinter.printBitmap(trimmed)
-                            }
-                            Log.i(TAG, "Page ${i + 1}/$pageCount: ${trimmed.size} bytes")
-                        } finally {
-                            bitmap?.recycle()
-                            cropped?.recycle()
-                            scaled?.recycle()
-                        }
-                    } finally {
-                        page.close()
-                    }
-                }
-            } finally {
-                // Android 7 (API 24-25) libpdfium.so has a bug in FPDF_CloseDocument
-                // that causes SIGABRT "Invalid address passed to free: value not allocated"
-                // Skip renderer.close() on API < 26 to avoid native crash.
-                // The fd.close() below will release the underlying file resources.
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    renderer.close()
-                } else {
-                    Log.w(TAG, "Skipping PdfRenderer.close() on API ${Build.VERSION.SDK_INT} to avoid libpdfium crash")
-                }
-            }
-        } finally {
-            try { fd.close() } catch (_: Exception) {}
+        val success = PdfRenderClient.renderAndPrint(
+            context,
+            pdfFile,
+            fullCut = AppPrefs.isFullCut(context)
+        )
+        if (!success) {
+            throw java.io.IOException("PDF render failed or timed out")
         }
     }
 
@@ -445,9 +471,29 @@ class IppServer(private val port: Int = 6631) {
         out.writeInteger("job-id", jobId)
         val ip = getLocalIpAddress()
         out.writeUri("job-uri", "ipp://$ip:$port/ipp/print/jobs/$jobId")
+        out.writeUri("job-printer-uri", "ipp://$ip:$port/ipp/print")
+        out.writeName("job-name", "Print Job")
+        out.writeName("job-originating-user-name", "user")
         out.writeEnum("job-state", jobState)
         out.writeKeyword("job-state-reasons",
             if (jobState == JOB_STATE_COMPLETED) "job-completed-successfully" else "none")
+
+        // Progress counters — phone waits for these to confirm the job actually finished.
+        // Without job-impressions-completed and time-at-completed, the framework keeps polling.
+        out.writeInteger("job-impressions", 1)
+        out.writeInteger("job-impressions-completed", 1)
+        out.writeInteger("job-media-sheets", 1)
+        out.writeInteger("job-media-sheets-completed", 1)
+        out.writeInteger("job-k-octets", 0)
+        out.writeInteger("job-k-octets-processed", 0)
+
+        // Timestamps (seconds since epoch — simplified).
+        val now = (System.currentTimeMillis() / 1000).toInt()
+        out.writeInteger("time-at-creation", now - 1)
+        out.writeInteger("time-at-processing", now - 1)
+        out.writeInteger("time-at-completed", if (jobState == JOB_STATE_COMPLETED) now else 0)
+        out.writeInteger("job-printer-up-time", now)
+
         out.write(TAG_END_OF_ATTRIBUTES)
         return out.toByteArray()
     }
@@ -737,12 +783,16 @@ class IppServer(private val port: Int = 6631) {
         private const val OP_PRINT_JOB = 0x0002
         private const val OP_VALIDATE_JOB = 0x0004
         private const val OP_GET_JOB_ATTRIBUTES = 0x0009
+        private const val OP_GET_JOBS = 0x000A
         private const val OP_GET_PRINTER_ATTRIBUTES = 0x000B
 
         // IPP Status Codes
         private const val STATUS_OK = 0x0000
 
-        // IPP Job States
+        // IPP Job States (RFC 8011 §5.3.7)
+        private const val JOB_STATE_PENDING = 3
+        private const val JOB_STATE_PROCESSING = 5
+        private const val JOB_STATE_ABORTED = 8
         private const val JOB_STATE_COMPLETED = 9
     }
 }
