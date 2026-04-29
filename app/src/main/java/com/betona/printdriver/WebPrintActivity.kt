@@ -244,35 +244,90 @@ class WebPrintActivity : AppCompatActivity() {
                         })();
                     """.trimIndent(), null)
                 }
-                // DSL(read365) 책 상세: 작고 붙어있는 "인쇄" 버튼 탭 영역을 크게.
-                // 텍스트/onclick/class 어디서든 print 패턴 잡고 min 44x44 + 좌우 여백 추가.
+                // DSL(read365) 책 상세: 인쇄 버튼이 햄버거(책정보) 아이콘 옆에 붙어있어
+                // 오탭 잦음. 어떤 패턴(text/class/onclick/aria/title/내부 이미지 alt)에서든
+                // 인쇄/print 발견하면 크고 두드러지게 만들고, 옆 형제 버튼과 간격 확보.
                 if (url?.contains("read365") == true || url?.contains("edunet") == true) {
                     view?.evaluateJavascript("""
                         (function() {
-                            function enlarge() {
-                                var nodes = document.querySelectorAll('button, a, [role=button], span[onclick]');
-                                nodes.forEach(function(n) {
-                                    if (n.dataset.libroEnlarged) return;
-                                    var t = (n.textContent || '').trim();
-                                    var oc = (n.getAttribute('onclick') || '');
-                                    var cls = (n.className || '') + '';
-                                    var hit = (t === '인쇄' || t === '프린트' || t === 'Print' ||
-                                               /print/i.test(oc) || /print/i.test(cls));
-                                    if (hit) {
-                                        n.dataset.libroEnlarged = '1';
-                                        n.style.minWidth = '64px';
-                                        n.style.minHeight = '48px';
-                                        n.style.padding = '10px 18px';
-                                        n.style.marginLeft = '10px';
-                                        n.style.marginRight = '10px';
-                                        n.style.fontSize = '15px';
-                                        n.style.fontWeight = 'bold';
-                                        n.style.borderRadius = '6px';
-                                    }
+                            function isPrintNode(n) {
+                                if (!n || n.nodeType !== 1) return false;
+                                var text = (n.textContent || '').trim();
+                                if (text === '인쇄' || text === '프린트' || text === 'Print') return true;
+                                var attrBag = ((n.className || '') + ' ' +
+                                               (n.getAttribute('onclick') || '') + ' ' +
+                                               (n.getAttribute('aria-label') || '') + ' ' +
+                                               (n.getAttribute('title') || '') + ' ' +
+                                               (n.id || '')).toLowerCase();
+                                if (/print|인쇄|프린트/.test(attrBag)) return true;
+                                // Inner img alt or src hint
+                                var imgs = n.querySelectorAll ? n.querySelectorAll('img,svg use,i') : [];
+                                for (var i = 0; i < imgs.length; i++) {
+                                    var alt = (imgs[i].getAttribute('alt') || '') +
+                                              (imgs[i].getAttribute('src') || '') +
+                                              (imgs[i].getAttribute('class') || '');
+                                    if (/print|인쇄|프린트/i.test(alt)) return true;
+                                }
+                                return false;
+                            }
+                            // 인쇄 버튼 + 같은 툴바의 형제 버튼들 모두 키우고 간격 확보
+                            // 레이아웃 안 깨지게 — scale + 좌우 마진만 변경.
+                            // padding/width/min-width 안 건드리면 원래 위치 유지됨.
+                            function applyEnhancement(el) {
+                                if (el.dataset.libroEnhanced) return;
+                                el.dataset.libroEnhanced = '1';
+                                el.style.cssText += ';' +
+                                    'transform:scale(1.5) !important;' +
+                                    'transform-origin:center !important;' +
+                                    'margin-left:14px !important;' +
+                                    'margin-right:14px !important;' +
+                                    'position:relative !important;' +
+                                    'z-index:5 !important;';
+                            }
+                            // "..." 수직 점 / 책정보 / more 메뉴 패턴 탐지
+                            function isInfoMenuNode(el) {
+                                if (!el || el.nodeType !== 1) return false;
+                                var tag = el.tagName.toLowerCase();
+                                if (tag !== 'button' && tag !== 'a' && tag !== 'span' &&
+                                    tag !== 'div' && tag !== 'li' && tag !== 'i') return false;
+                                var text = (el.textContent || '').trim();
+                                // 점 문자 패턴
+                                if (text === '⋮' || text === '⋯' || text === '...' ||
+                                    text === '...' || text === '책정보' || text === '더보기' ||
+                                    text === '메뉴') return true;
+                                var attrs = ((el.className || '') + ' ' +
+                                             (el.id || '') + ' ' +
+                                             (el.getAttribute('aria-label') || '') + ' ' +
+                                             (el.getAttribute('title') || '') + ' ' +
+                                             (el.getAttribute('onclick') || '')).toLowerCase();
+                                if (/more[-_]?vert|kebab|책정보|책_정보|book[-_]?info|menu[-_]?vert|dot[-_]?menu|더보기|메뉴/.test(attrs)) return true;
+                                // 내부 이미지/svg/i 의 클래스/src/alt 검사
+                                var icons = el.querySelectorAll ? el.querySelectorAll('img,svg use,i,span') : [];
+                                for (var i = 0; i < icons.length; i++) {
+                                    var ic = icons[i];
+                                    var ihint = ((ic.className || '') + ' ' +
+                                                 (ic.getAttribute('alt') || '') + ' ' +
+                                                 (ic.getAttribute('src') || '')).toLowerCase();
+                                    if (/more[-_]?vert|kebab|책정보|book[-_]?info|menu[-_]?vert|dot/.test(ihint)) return true;
+                                }
+                                return false;
+                            }
+                            function enhance() {
+                                // 1) 인쇄 버튼
+                                document.querySelectorAll(
+                                    'button, a, [role=button], span[onclick], div[onclick], li[onclick]'
+                                ).forEach(function(n) {
+                                    if (!n.dataset.libroEnhanced && isPrintNode(n)) applyEnhancement(n);
+                                });
+                                // 2) "..." 책정보 / more 메뉴
+                                document.querySelectorAll(
+                                    'button, a, [role=button], span, div[onclick], li[onclick], i'
+                                ).forEach(function(n) {
+                                    if (!n.dataset.libroEnhanced && isInfoMenuNode(n)) applyEnhancement(n);
                                 });
                             }
-                            enlarge();
-                            var obs = new MutationObserver(enlarge);
+                            enhance();
+                            var obs = new MutationObserver(enhance);
                             obs.observe(document.body, { childList: true, subtree: true });
                         })();
                     """.trimIndent(), null)

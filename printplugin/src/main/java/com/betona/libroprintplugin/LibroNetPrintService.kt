@@ -59,7 +59,14 @@ class LibroNetPrintService : PrintService() {
             fd.close()
             return
         }
-        val endpoint = discoverySession?.getEndpoint(printerId)
+        // Resolve endpoint via discovery session (live NSD or registry fallback).
+        // If discovery isn't bound (rare race after onDestroy), look directly in
+        // the persistent registry.
+        val endpoint = discoverySession?.getEndpoint(printerId) ?: run {
+            val name = printerId.localId.removePrefix("libro-net-")
+            val saved = KioskRegistry.getAll(this).firstOrNull { it.name == name }
+            saved?.let { LibroNetDiscoverySession.Endpoint(it.host, it.port, it.name) }
+        }
         if (endpoint == null) {
             Log.e(TAG, "Printer endpoint not found for ${printerId.localId}")
             printJob.fail("프린터를 찾을 수 없습니다")

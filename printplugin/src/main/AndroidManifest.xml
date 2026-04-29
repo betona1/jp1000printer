@@ -23,7 +23,8 @@
                 android:resource="@xml/print_service_info" />
         </service>
 
-        <!-- Settings: pick a default kiosk so only that one shows in the print picker -->
+        <!-- Setup + default-printer settings — visible from app drawer and from
+             the system print settings page. -->
         <activity
             android:name=".PluginSettingsActivity"
             android:exported="true"
