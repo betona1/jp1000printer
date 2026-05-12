@@ -129,6 +129,15 @@
             android:contentDescription="절단 모드"
             android:padding="8dp" />
 
+        <ImageButton
+            android:id="@+id/btnNetworkPrinter"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:src="@drawable/ic_action_network_printer"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="네트워크 프린터 정보"
+            android:padding="8dp" />
+
         <TextView
             android:id="@+id/txtClock"
             android:layout_width="wrap_content"

@@ -156,6 +156,9 @@ class WebPrintActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.btnMenu).setOnClickListener {
             startActivity(Intent(this, MainActivity::class.java))
         }
+        findViewById<ImageButton>(R.id.btnNetworkPrinter).setOnClickListener {
+            NetworkPrinterInfoDialog.show(this)
+        }
 
         // Apply saved orientation
         requestedOrientation = if (AppPrefs.isLandscape(this))
